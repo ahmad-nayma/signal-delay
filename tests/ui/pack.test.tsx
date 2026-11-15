@@ -260,9 +260,11 @@ describe('ROCKET on solo Pack (spec UI rule 58)', () => {
     expect(within(b).getByText(ROCKET_WORDS.charge(f.signedMoney(20)))).toBeTruthy();
     expect(within(a).getByText(ROCKET_WORDS.record(f.num(40), f.num(41)))).toBeTruthy();
     const budgetBefore = limitRow('budget').querySelector('.ml-v')!.textContent;
-    const lift411 = liftText(b);
     fireEvent.click(b);
     expect(option(/Atlas V 411/).getAttribute('aria-checked')).toBe('true');
+    // Read the 411's lift after the pick: the rocket can move the auto-picked launch day (bestLaunchDay weighs the
+    // launch-mass margin), and with it the C3 and what the rocket lifts.
+    const lift411 = liftText(option(/Atlas V 411/));
     // the weight bar's limit is now what the 411 lifts; the budget bar carries the 20 $M
     expect(limitRow('weight').querySelector('.ml-v')!.textContent!.endsWith(lift411.replace(ROCKET_WORDS.lifts(''), ''))).toBe(true);
     expect(limitRow('budget').querySelector('.ml-v')!.textContent).not.toBe(budgetBefore);
