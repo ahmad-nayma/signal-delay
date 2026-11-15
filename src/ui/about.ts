@@ -6,7 +6,7 @@ export const ABOUT = {
   /** Your team's name. TODO: replace. */
   teamName: 'Our Team',
   /** Your own GitHub repository. TODO: replace with the real URL. */
-  repoUrl: 'https://github.com/YOUR-ORG/YOUR-REPO',
+  repoUrl: 'https://github.com/ahmad-nayma/signal-delay',
   /** One entry per team member (name, and an optional role). TODO: replace with your names. */
   members: [
     { name: 'Member One', role: '' },

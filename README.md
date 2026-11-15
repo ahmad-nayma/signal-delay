@@ -6,9 +6,9 @@
 
 *Design a NASA-style mission against real limits, then keep the robot alive millions of kilometres away, where every order you send arrives minutes late.*
 
-**[▶ Play in your browser](https://YOUR-ORG.github.io/YOUR-REPO/)** · no install, no account
+**[▶ Play in your browser](https://ahmad-nayma.github.io/signal-delay/)** · no install, no account
 
-[![Deploy to GitHub Pages](https://github.com/YOUR-ORG/YOUR-REPO/actions/workflows/pages.yml/badge.svg)](https://github.com/YOUR-ORG/YOUR-REPO/actions/workflows/pages.yml)
+[![Deploy to GitHub Pages](https://github.com/ahmad-nayma/signal-delay/actions/workflows/pages.yml/badge.svg)](https://github.com/ahmad-nayma/signal-delay/actions/workflows/pages.yml)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![Vite](https://img.shields.io/badge/Vite-8-646cff)
@@ -67,7 +67,7 @@ It is designed for students and curious players first (**Cadet mode**), and for 
 
 ## Judge in 3 minutes
 
-Open **[the judge link](https://YOUR-ORG.github.io/YOUR-REPO/?play=mars&seed=2013)** (desktop is best for this route; a phone works too, with no install). It opens the Mars level, **Red Planet**, straight away, on a fixed flight (seed 2013) whose first danger card comes early. Normal players unlock Red Planet by earning a star on each Moon level first; the link changes no saved progress. Each step says what to look for.
+Open **[the judge link](https://ahmad-nayma.github.io/signal-delay/?play=mars&seed=2013)** (desktop is best for this route; a phone works too, with no install). It opens the Mars level, **Red Planet**, straight away, on a fixed flight (seed 2013) whose first danger card comes early. Normal players unlock Red Planet by earning a star on each Moon level first; the link changes no saved progress. Each step says what to look for.
 
 | Time | Do this | Look for |
 | --- | --- | --- |
@@ -359,8 +359,8 @@ See [`game_engine.md`](game_engine.md) for the engine rules and [`docs/SCIENCE_S
 **Quick start (macOS, Linux or Windows, with Node 22 already installed):**
 
 ```bash
-git clone https://github.com/YOUR-ORG/YOUR-REPO.git
-cd YOUR-REPO
+git clone https://github.com/ahmad-nayma/signal-delay.git
+cd signal-delay
 npm install
 npm run dev          # http://localhost:5173
 npm test             # about 900 tests

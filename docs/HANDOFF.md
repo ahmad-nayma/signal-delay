@@ -1,6 +1,6 @@
 # Handoff: where Signal Delay stands
 
-State on **Oct 28, 2026**, at the feature freeze, plus Team Mode (engine PRs #47–#50; local co-op UI PRs #52–#57, Nov 1), the Online Mission Room (PRs #58–#59, Nov 2) and the Space Apps plan (`docs/SPACE_APPS_PLAN.md`, PRs #60–#66, Nov 10–11: objective, mission limits, rocket, science orbit, verified real history, the design loop, polish; see below). `main` is clean, CI green, deployed to https://YOUR-ORG.github.io/YOUR-REPO/ .
+State on **Oct 28, 2026**, at the feature freeze, plus Team Mode (engine PRs #47–#50; local co-op UI PRs #52–#57, Nov 1), the Online Mission Room (PRs #58–#59, Nov 2) and the Space Apps plan (`docs/SPACE_APPS_PLAN.md`, PRs #60–#66, Nov 10–11: objective, mission limits, rocket, science orbit, verified real history, the design loop, polish; see below). `main` is clean, CI green, deployed to https://ahmad-nayma.github.io/signal-delay/ .
 
 Read this first in a new session, then `CLAUDE.md` (commands, architecture, UI rules) and the relevant section of `docs/SCIENCE_SPEC.md` (v1.4, the source of truth for every equation and rule).
 
