@@ -1,0 +1,30 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+import { initLang } from './i18n';
+import './styles/theme.css';
+import './styles/app.css';
+import './styles/sd-cadet.css';
+import './styles/ops.css';
+import './styles/sd-fly.css';
+import './styles/sd-pack.css';
+import './styles/sd-launch.css';
+import './styles/sd-report.css';
+import './styles/sd-home.css';
+import './styles/sd-name.css';
+import './styles/sd-coldopen.css';
+import './styles/sd-daily.css';
+import './styles/sd-moments.css';
+import './styles/sd-science.css';
+import './styles/sd-postcards.css';
+import './styles/sd-team.css';
+import './styles/sd-online.css';
+import './styles/sd-kids.css';
+
+initLang();
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

@@ -1,0 +1,376 @@
+/* Signal Delay design tokens: the design system.
+   Primary   #001D3A, #0B1B2A  dark grounds and major text
+   Secondary #00D2FF, #0099FF  interactive elements, screens, the neon cyan glow
+   Accent    #FF9900, #FFAD00  calls to action
+   Character #C68B59, #D49B6A  the robot
+   Neutral   #FFFFFF           text on the dark grounds
+   Type: Space Grotesk for text, headings and keys; Orbitron only for the brand and technical panel titles;
+   JetBrains Mono for screen readouts (CRT text, the teletype, equations).
+   Containers carry a soft drop shadow (10–20 % opacity) instead of borders; active and interactive elements glow
+   neon cyan. The token names keep their old roles (chassis, CRT, "amber" keys, paper) so every screen follows. */
+:root {
+  /* Design-system colours */
+  --ds-primary: #001d3a;
+  --ds-primary-2: #0b1b2a;
+  --ds-secondary: #00d2ff;
+  --ds-secondary-2: #0099ff;
+  --ds-accent: #ff9900;
+  --ds-accent-2: #ffad00;
+  --ds-character: #c68b59;
+  --ds-character-2: #d49b6a;
+  --ds-neutral: #ffffff;
+
+  /* Page and panels (dark grounds) */
+  --sd-room: var(--ds-primary-2);
+  --sd-room-2: #091726;
+  --sd-chassis: var(--ds-primary);
+  --sd-panel: #04223f;
+  --sd-panel-hover: #082c50;
+  --sd-bezel: #062644;
+  --sd-line: #0a2848;
+  --sd-line-2: #15426b;
+  --sd-deep: #00142a;
+  --sd-deeper: #021325;
+  --sd-dark-key: #000e1d;
+  --sd-inset-hi: #0b3359;
+  --sd-frame-hi: #072a4c;
+
+  /* Screens (maps, globe, readouts): deep navy glass with cyan ink */
+  --sd-crt: #03172b;
+  --sd-crt-chip: #062440;
+  --sd-crt-grid: #0a2b4a;
+  --sd-crt-off: #0f3558;
+  --sd-crt-line: #145a8a;
+  --sd-crt-dim: #3aa9da;
+  --sd-crt-mid: var(--ds-secondary-2);
+  --sd-crt-hi: var(--ds-secondary);
+
+  /* Calls to action (the old "amber" role): accent orange, dark ink on it */
+  --sd-amber: var(--ds-accent);
+  --sd-amber-hi: var(--ds-accent-2);
+  --sd-amber-edge: #b86d00;
+  --sd-amber-ink: var(--ds-primary-2);
+  --sd-on-primary: var(--ds-primary-2);
+
+  /* Cards (danger cards, report, briefing) */
+  --sd-paper: #062644;
+  --sd-paper-2: #0a2f54;
+  --sd-paper-3: #0d3660;
+  --sd-paper-line: #15426b;
+  --sd-paper-ink: var(--ds-neutral);
+  --sd-paper-ink-2: #d4e3f1;
+  --sd-paper-mute: #8fb0cf;
+  --sd-inset-panel: var(--ds-primary-2);
+
+  /* The robot */
+  --sd-character: var(--ds-character);
+  --sd-character-2: var(--ds-character-2);
+
+  /* Reds (danger) */
+  --sd-red: #ff4d3d;
+  --sd-red-edge: #a3261a;
+  --sd-red-ink: #ff7a6b;
+  --sd-coral: #ff8a6d;
+  --sd-alarm: #ff5a3d;
+
+  /* Status stamps */
+  --sd-ok: #3ddc84;
+  --sd-soso: var(--ds-accent-2);
+  --sd-soso-2: #e09400;
+  --sd-bad: #ff5a4f;
+  --sd-bad-2: #a3261a;
+  --sd-gold: var(--ds-accent-2);
+
+  /* Ink ramp (text on the dark grounds): white to slate */
+  --sd-ink: var(--ds-neutral);
+  --sd-ink-2: #e6eef7;
+  --sd-ink-3: #c2d3e4;
+  --sd-ink-4: #9db6cf;
+  --sd-ink-5: #7593b1;
+  --sd-ink-6: #4a6a8a;
+
+  /* Sky */
+  --sd-sun: #ff9a2e;
+  --sd-sun-core: #ffc94a;
+  --sd-earth: #3a86d8;
+  --sd-land: #5cc46e;
+  --sd-mars: #d6603a;
+  --sd-mars-dark: #9e3a1f;
+  --sd-ice: #f4eee0;
+  --sd-panel-blue: #3a6fd8;
+  --sd-panel-edge: #bcd3ff;
+  --sd-bus-gold: #f2c94c;
+  --sd-bus-edge: #8a6a12;
+  --sd-comic: #16182a;
+
+  /* Part palette (Pack) */
+  --sd-part-brain: #b9a6e6;
+  --sd-part-drive: #9fb49a;
+  --sd-part-guard: #e0673f;
+  --sd-part-power: #f2c94c;
+  --sd-part-science: #6fa8e8;
+
+  /* Type: Space Grotesk (text, headings, keys, labels), Orbitron (brand, technical titles), JetBrains Mono (readouts) */
+  --sd-sans-font: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sd-tech-font: 'Orbitron', 'Space Grotesk', system-ui, sans-serif;
+  --sd-mono-font: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sd-display: var(--sd-sans-font);
+  --sd-body: var(--sd-sans-font);
+  --sd-mono: var(--sd-sans-font);
+  --sd-crt-font: var(--sd-mono-font);
+  --sd-tech: var(--sd-tech-font);
+
+  /* Motion */
+  --sd-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --sd-fast: 0.15s;
+  --sd-med: 0.25s;
+
+  /* Radii */
+  --sd-r-1: 2px;
+  --sd-r-2: 3px;
+  --sd-r-3: 4px;
+  --sd-r-4: 5px;
+  --sd-r-5: 6px;
+  --sd-r-6: 8px;
+  --sd-r-7: 10px;
+  --sd-r-8: 12px;
+  --sd-r-crt: 22px;
+  --sd-r-phone: 34px;
+
+  /* Spacing */
+  --sd-s-1: 4px;
+  --sd-s-2: 6px;
+  --sd-s-3: 8px;
+  --sd-s-4: 10px;
+  --sd-s-5: 12px;
+  --sd-s-6: 14px;
+  --sd-s-7: 18px;
+  --sd-s-8: 22px;
+  --sd-s-9: 28px;
+  --sd-s-10: 56px;
+
+  /* Shadows and glows: soft drop shadows (10–20 %) on containers, neon cyan glow on what is active */
+  --sd-shadow-frame: 0 14px 36px rgba(0, 0, 0, 0.2);
+  --sd-shadow-card: 0 10px 28px rgba(0, 0, 0, 0.18);
+  --sd-shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.12);
+  --sd-inset: none;
+  --sd-key-edge: none;
+  --sd-crt-inset: none;
+  --sd-well: none;
+  --sd-glow-cyan: 0 0 0 1px rgba(0, 210, 255, 0.55), 0 0 14px rgba(0, 210, 255, 0.45);
+  --sd-glow-green: none;
+  --sd-glow-amber: var(--sd-glow-cyan);
+  --sd-scanlines: none;
+}
+
+/* ---- Base ---- */
+html, body, #root { margin: 0; min-height: 100%; }
+body { background: var(--sd-room); color: var(--sd-ink-2); font-family: var(--sd-body); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+.sd { font-family: var(--sd-body); color: var(--sd-ink-2); }
+:where(.sd) button { font: inherit; color: inherit; }
+:where(.sd) a { color: var(--sd-amber); text-decoration: none; }
+:where(.sd) a:hover { color: var(--sd-amber-hi); }
+.sd :focus-visible { outline: 2px solid var(--sd-amber); outline-offset: 2px; }
+
+/* ---- Shared pieces ---- */
+.sd-label { font: 700 11px/1 var(--sd-mono); letter-spacing: 0.16em; color: var(--sd-ink-2); text-transform: uppercase; }
+.sd-label.dim { color: var(--sd-ink-4); }
+.sd-crt-text { font-family: var(--sd-crt-font); color: var(--sd-crt-hi); text-shadow: none; }
+.sd-cursor { display: inline-block; }
+.sd-cursor.off { opacity: 0; }
+
+/* Brand block */
+.sd-brand { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sd-brand-name { font: 900 22px/1 var(--sd-display); color: var(--sd-ink); letter-spacing: 0.06em; white-space: nowrap; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.sd-brand-sub { font: 400 11px/1 var(--sd-mono); color: var(--sd-ink-4); letter-spacing: 0.18em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Cadet / Engineer lever */
+.sd-lever { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.sd-lever-word { font: 700 11px/1 var(--sd-mono); letter-spacing: 0.14em; color: var(--sd-ink-5); }
+.sd-lever-word.on { color: var(--sd-amber); }
+.sd-lever-switch { cursor: pointer; position: relative; width: 62px; height: 32px; border-radius: 16px; border: 1px solid var(--sd-line-2); background: var(--sd-deeper); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15); padding: 0; flex: none; }
+.sd-lever-knob { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(#ffffff, #03172a); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: left 0.18s ease; }
+.sd-lever-switch[aria-checked='true'] .sd-lever-knob { left: 32px; }
+.sd-lever-short { display: none; cursor: pointer; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--sd-line-2); background: var(--sd-deeper); color: var(--sd-ink-5); font: 700 10px/1 var(--sd-mono); letter-spacing: 0.1em; }
+.sd-lever-short[aria-pressed='true'] { color: var(--sd-amber); }
+
+/* Keys */
+.sd-key { cursor: pointer; border-radius: 5px; border: 1px solid var(--sd-deep); border-bottom: 4px solid var(--sd-dark-key); background: var(--sd-line); color: var(--sd-ink-2); font: 800 15px/1 var(--sd-display); letter-spacing: 0.04em; }
+.sd-key[aria-pressed='true'] { background: var(--sd-amber); color: var(--sd-on-primary); border-bottom-color: var(--sd-amber-edge); box-shadow: 0 0 14px rgba(0, 210, 255, 0.25); }
+.sd-key:disabled { cursor: not-allowed; opacity: 0.5; }
+.sd-cta { cursor: pointer; padding: 14px 22px; border-radius: 5px; border: none; border-bottom: 4px solid var(--sd-amber-edge); background: var(--sd-amber); color: var(--sd-on-primary); font: 800 16px/1 var(--sd-display); letter-spacing: 0.08em; white-space: nowrap; }
+.sd-cta:disabled { cursor: not-allowed; background: var(--sd-line); color: var(--sd-ink-5); border-bottom-color: var(--sd-dark-key); }
+.sd-cta.red { background: var(--sd-red); color: var(--sd-paper); border-bottom-color: var(--sd-red-edge); }
+.sd-ghost-btn { cursor: pointer; padding: 9px 14px; border-radius: 4px; border: 1px solid var(--sd-line); background: var(--sd-chassis); color: var(--sd-ink-2); font: 700 12px/1 var(--sd-mono); letter-spacing: 0.08em; white-space: nowrap; }
+.sd-ghost-btn:hover { border-color: var(--sd-amber); }
+.sd-ghost-btn[aria-pressed='true'] { background: var(--sd-amber); border-color: var(--sd-amber); color: var(--sd-on-primary); }
+
+/* CRT screen */
+.sd-crt { position: relative; border-radius: var(--sd-r-crt); border: 10px solid var(--sd-bezel); background: var(--sd-crt); box-shadow: var(--sd-crt-inset), 0 0 0 1px var(--sd-line); overflow: hidden; }
+.sd-crt::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: var(--sd-scanlines); }
+.sd-well { background: var(--sd-crt); border-radius: 4px; box-shadow: var(--sd-well); }
+
+/* Segment bars */
+.sd-segs { display: flex; gap: 4px; }
+.sd-seg { width: 16px; height: 14px; border-radius: 2px; background: var(--sd-crt-off); }
+.sd-seg.on { background: var(--seg-col, var(--sd-crt-hi)); box-shadow: 0 0 8px var(--seg-col, var(--sd-crt-hi)); }
+
+/* Chips on choice cards */
+.sd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 4px; border: 1.5px solid currentColor; font: 400 15px/1 var(--sd-crt-font); white-space: nowrap; }
+.sd-chip.cost { color: var(--sd-coral); }
+.sd-chip.gain { color: var(--sd-crt-hi); }
+.sd-chip.risk { color: var(--sd-amber); border-style: dashed; }
+.sd-chip.info { color: var(--sd-crt-mid); }
+
+/* Paper card */
+.sd-paper { background: var(--sd-paper); color: var(--sd-paper-ink); }
+.sd-history { padding-top: 14px; border-top: 2px dashed var(--sd-paper-line); display: flex; flex-direction: column; gap: 6px; }
+.sd-history-k { font: 700 11px/1 var(--sd-mono); letter-spacing: 0.18em; color: var(--sd-red-ink); display: flex; align-items: center; gap: 8px; }
+.sd-history-v { font: 400 16px/1.45 var(--sd-body); color: var(--sd-paper-ink-2); text-wrap: pretty; }
+.sd-source { font: 400 11px/1.4 var(--sd-mono); color: var(--sd-paper-mute); overflow-wrap: anywhere; }
+.sd-verify { padding: 2px 5px; border: 1px solid var(--sd-red-ink); border-radius: 2px; font: 700 9px/1 var(--sd-mono); letter-spacing: 0.12em; color: var(--sd-red-ink); }
+
+/* Loading */
+.sd-loading { min-height: 100vh; display: grid; place-items: center; background: var(--sd-chassis); }
+.sd-loading p { font: 400 17.5px/1.2 var(--sd-crt-font); color: var(--sd-crt-hi); text-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sd *, .sd *::before, .sd *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+}
+
+.sd-cursor { animation: sd-blink 0.9s steps(1) infinite; }
+@keyframes sd-blink { 50% { opacity: 0; } }
+
+/* ---- Back key (every step) ---- */
+.sd-back { cursor: pointer; flex: none; padding: 9px 14px; border-radius: 4px; border: 1px solid var(--sd-line-2); background: var(--sd-chassis); color: var(--sd-amber); font: 700 13px/1 var(--sd-mono); letter-spacing: 0.1em; white-space: nowrap; }
+.sd-back:hover { border-color: var(--sd-amber); background: var(--sd-panel-hover); }
+
+/* ---- Overlays: briefing, coach panels, confirmations ---- */
+.sd-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.45); }
+.sd-coach, .sd-brief, .sd-confirm { width: min(580px, 100%); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; padding: 24px 26px; border-radius: 8px; background: var(--sd-paper); color: var(--sd-paper-ink); box-shadow: var(--sd-shadow-card); font-family: var(--sd-body); display: flex; flex-direction: column; gap: 16px; }
+.sd-coach-head, .sd-coach-foot, .sd-confirm-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sd-confirm-foot { justify-content: flex-end; }
+.sd-coach-count { font: 400 13px/1 var(--sd-mono); color: var(--sd-paper-mute); letter-spacing: 0.12em; }
+.sd-coach-body { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 16px; align-items: center; min-height: 120px; }
+.sd-coach-icon { width: 64px; height: 64px; border-radius: 8px; display: grid; place-items: center; background: var(--sd-inset-panel); }
+.sd-coach-title, .sd-brief-title { margin: 0 0 6px; font: 900 22px/1.15 var(--sd-display); letter-spacing: 0.06em; color: var(--sd-paper-ink); }
+.sd-coach-text, .sd-brief-job { margin: 0; font: 500 17px/1.45 var(--sd-body); color: var(--sd-paper-ink-2); text-wrap: pretty; }
+.sd-coach-dots { display: flex; gap: 6px; justify-content: center; }
+.sd-coach-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--sd-paper-line); }
+.sd-coach-dots span.on { background: var(--sd-red); }
+.sd-coach-nav { display: flex; gap: 8px; margin-left: auto; }
+.sd-overlay .sd-ghost-btn { background: transparent; color: var(--sd-paper-ink); border-color: var(--sd-paper-line); }
+.sd-overlay .sd-ghost-btn:hover { border-color: var(--sd-red-ink); }
+.sd-overlay .sd-cta { font-size: 15px; padding: 12px 18px; }
+.sd-brief-head { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 2px dashed var(--sd-paper-line); }
+.sd-brief-concept { font: 700 12px/1 var(--sd-mono); letter-spacing: 0.14em; color: var(--sd-paper-mute); }
+.sd-brief-sec { display: flex; flex-direction: column; gap: 8px; }
+.sd-brief-sec h3 { margin: 0; font: 700 12px/1 var(--sd-mono); letter-spacing: 0.18em; color: var(--sd-red-ink); }
+.sd-brief-tip { margin: 0; display: flex; gap: 8px; align-items: flex-start; font: 500 15px/1.4 var(--sd-body); color: var(--sd-paper-ink-2); background: var(--sd-paper-2); border: 1px solid var(--sd-paper-line); border-radius: 4px; padding: 8px 10px; }
+.sd-brief-stars, .sd-brief-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font: 500 15px/1.35 var(--sd-body); color: var(--sd-paper-ink-2); }
+.sd-brief-stars li, .sd-brief-steps li { display: flex; gap: 10px; align-items: center; }
+.sd-brief-starrow { display: inline-flex; gap: 2px; width: 50px; flex: none; }
+.sd-brief-num { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--sd-inset-panel); color: var(--sd-amber); font: 700 12px/1 var(--sd-display); }
+.sd-brief-steps b { font: 700 13px/1 var(--sd-display); letter-spacing: 0.06em; color: var(--sd-paper-ink); margin-right: 4px; }
+.sd-brief-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.sd-brief-foot .sd-back { margin-right: auto; }
+/* The solo objective (spec UI rule 56): three radio cards, the pick in red ink */
+.sd-brief-obj-sub { margin: 0; font: 500 14px/1.4 var(--sd-body); color: var(--sd-paper-ink-2); text-wrap: pretty; }
+.sd-brief-objs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sd-brief-obj .sd-brief-objs:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.sd-brief-objcard { cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 5px; border: 2px solid var(--sd-paper-line); border-bottom-width: 4px; background: var(--sd-paper-2); color: var(--sd-paper-ink); text-align: left; font: inherit; min-width: 0; }
+.sd-brief-objcard:hover { border-color: var(--sd-red-ink); }
+.sd-brief-objcard.on { border-color: var(--sd-red-ink); background: var(--sd-paper); box-shadow: inset 0 0 0 1px var(--sd-red-ink); }
+div.sd-brief-objcard { cursor: default; }
+.sd-brief-obj-title { font: 800 13px/1.15 var(--sd-display); letter-spacing: 0.05em; color: var(--sd-paper-ink); overflow-wrap: anywhere; }
+.sd-brief-objcard.on .sd-brief-obj-title { color: var(--sd-red-ink); }
+.sd-brief-obj-line { font: 500 13px/1.35 var(--sd-body); color: var(--sd-paper-ink-2); text-wrap: pretty; }
+.sd-brief-obj-needs { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: auto; font: 700 11px/1.25 var(--sd-mono); letter-spacing: 0.06em; color: var(--sd-paper-mute); }
+.sd-brief-obj-on { color: var(--sd-ok); }
+@media (max-width: 600px) {
+  .sd-coach, .sd-brief, .sd-confirm { padding: 18px 16px; }
+  .sd-coach-body { grid-template-columns: 48px minmax(0, 1fr); }
+  .sd-coach-icon { width: 48px; height: 48px; }
+  .sd-coach-title, .sd-brief-title { font-size: 18px; }
+  .sd-coach-text, .sd-brief-job { font-size: 15px; }
+  .sd-brief-objs { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .sd-brief-objcard { padding: 8px 10px; gap: 4px; }
+}
+
+/* ---- Language switch (components/sd/LangToggle.tsx): the language in use is lit ---- */
+.sd-lang { display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; line-height: 1; }
+.sd-ghost-btn.sd-lang { background: transparent; border-color: var(--sd-line-2); }
+.sd-lang span { color: var(--sd-ink-5); }
+.sd-lang span.on { color: var(--sd-amber); }
+.sd-lang .sd-lang-bar { color: var(--sd-line-2); }
+
+/* ==== Design system: type, calls to action, neon cyan for what is interactive or active, minimal containers ==== */
+/* Text, headings, keys and buttons in Space Grotesk; the brand and technical panel titles in Orbitron. */
+.sd :where(h1, h2, h3, .sd-cta, .sd-key, .sd-brief-title, .sd-coach-title) { font-family: var(--sd-display); }
+.sd :where(button) { font-family: var(--sd-display); letter-spacing: 0.04em; }
+body, .sd { font-family: var(--sd-body); }
+.sd .sd-brand-name, .sd .pk-panel-title, .sd .hm-word, .brand-name { font-family: var(--sd-tech); }
+
+/* Calls to action: accent orange with dark ink, a soft shadow, the brighter orange on hover. */
+.sd-cta, .sd-key[aria-pressed='true'] { background: var(--ds-accent); color: var(--ds-primary-2); border-bottom-color: #b86d00; box-shadow: var(--sd-shadow-soft); }
+.sd-cta:hover:not(:disabled) { background: var(--ds-accent-2); box-shadow: var(--sd-shadow-soft), 0 0 16px rgba(255, 153, 0, 0.45); }
+
+/* Interactive elements: neon cyan glow on hover, focus and when active (pressed, selected, checked). */
+.sd :is(button, a, [role='tab'], input, select, textarea):focus-visible { outline: 2px solid var(--ds-secondary); outline-offset: 2px; box-shadow: var(--sd-glow-cyan); }
+.sd :is(.sd-ghost-btn, .sd-back, .sd-key, .sd-lang, .hm-mini, .hm-missions, .pk-tab, .pk-tray-card, .rp-btn, .sd-brief-objcard):hover:not(:disabled) { border-color: var(--ds-secondary); box-shadow: var(--sd-glow-cyan); }
+.sd :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true']):not(.sd-cta):not(.sd-key) { box-shadow: var(--sd-glow-cyan); }
+.sd :is(.sd-ghost-btn, .sd-back, .sd-lang) { color: var(--ds-secondary); }
+:where(.sd) a, :where(.sd) a:hover { color: var(--ds-secondary); }
+
+/* Minimal containers: no hairline borders, a soft drop shadow instead, more room inside. */
+.sd :is(.pk-panel, .sd-crt, .hm-crt, .fly-panel, .ml, .rk-card, .ob2-card, .rp-card, .sd-coach, .sd-brief, .sd-confirm, .dl-card, .nm-card, .tm-panel) { border-color: transparent; box-shadow: var(--sd-shadow-card); }
+.sd-crt { border-width: 0; }
+.pk-dots { display: none; }
+.sd-history, .sd-brief-head { border-top-style: solid; border-bottom-style: solid; border-color: var(--sd-line); }
+.cadet { gap: 20px; }
+.sd-coach, .sd-brief, .sd-confirm { padding: 28px 30px; gap: 20px; }
+
+/* ==== Polish layer: one set of rules for type rhythm, surfaces, states and motion across every screen ==== */
+body { font-feature-settings: 'tnum' 1, 'ss01' 1; text-rendering: optimizeLegibility; }
+.sd :where(p) { line-height: 1.5; }
+.sd-label { font-weight: 600; letter-spacing: 0.14em; }
+.sd-brand-name { font-weight: 800; letter-spacing: 0.08em; }
+.pk-panel-title { font-weight: 700; letter-spacing: 0.1em; }
+
+/* Surfaces: a soft top light on raised panels, so depth reads without hairlines */
+.sd :is(.pk-panel, .fly-panel, .ml, .rk-card, .ob2, .sd-coach, .sd-brief, .sd-confirm, .ops-panel) { background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 120px); }
+.sd :is(.pk-panel, .ml, .ob2, .rk-card) { border-radius: var(--sd-r-8); }
+
+/* Interactive states: every key eases between rest, hover, press and focus */
+.sd :is(button, [role='tab'], a, .pk-tray-card, .pk-part) { transition: background-color var(--sd-fast) var(--sd-ease), border-color var(--sd-fast) var(--sd-ease), box-shadow var(--sd-med) var(--sd-ease), color var(--sd-fast) var(--sd-ease), transform var(--sd-fast) var(--sd-ease), opacity var(--sd-fast) var(--sd-ease); }
+.sd :is(.sd-cta, .sd-key, .sd-ghost-btn, .sd-back, .pk-tray-card, .fly-action, .cta, .btn-sm):active:not(:disabled) { transform: translateY(1px); }
+.sd :is(.sd-cta, .sd-key):disabled, .sd button:disabled { cursor: not-allowed; }
+.sd-cta { border-radius: var(--sd-r-6); }
+
+/* Scrollbars: thin, in the screen colour */
+.sd *, .app * { scrollbar-width: thin; scrollbar-color: rgba(0, 153, 255, 0.45) transparent; }
+
+/* Screens fade in on arrival (instant under reduced motion) */
+#root > .sd, #root > .app { animation: sd-enter var(--sd-med) var(--sd-ease); }
+@keyframes sd-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #root > .sd, #root > .app { animation: none; } }
+
+/* Launch burst (motion.ts launchBurst): two shock waves and twelve sparks from the launch key */
+.mo-burst { position: fixed; z-index: 90; width: 0; height: 0; pointer-events: none; }
+.mo-wave { position: absolute; left: -40px; top: -40px; width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--ds-accent-2); animation: mo-wave 0.56s ease-out forwards; }
+.mo-wave.w2 { border-color: var(--ds-secondary); animation-delay: 0.08s; }
+@keyframes mo-wave { from { opacity: 0.9; transform: scale(0.4); } to { opacity: 0; transform: scale(4); } }
+.mo-spark { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-accent-2); box-shadow: 0 0 10px var(--ds-accent); animation: mo-spark 0.56s ease-out forwards; }
+.mo-spark:nth-child(3) { --a: 0deg; } .mo-spark:nth-child(4) { --a: 30deg; } .mo-spark:nth-child(5) { --a: 60deg; } .mo-spark:nth-child(6) { --a: 90deg; }
+.mo-spark:nth-child(7) { --a: 120deg; } .mo-spark:nth-child(8) { --a: 150deg; } .mo-spark:nth-child(9) { --a: 180deg; } .mo-spark:nth-child(10) { --a: 210deg; }
+.mo-spark:nth-child(11) { --a: 240deg; } .mo-spark:nth-child(12) { --a: 270deg; } .mo-spark:nth-child(13) { --a: 300deg; } .mo-spark:nth-child(14) { --a: 330deg; }
+@keyframes mo-spark { from { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); } to { opacity: 0; transform: rotate(var(--a)) translateX(120px) scale(0.3); } }
+/* Drawers and overlays slide or fade in rather than appear */
+.fly-drawer:not(.wide) { animation: mo-drawer 0.32s var(--sd-ease); }
+.fly-drawer.wide { animation: mo-fade 0.3s ease-out; }
+@keyframes mo-drawer { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+.sd-overlay { animation: mo-fade 0.22s ease-out; }
+.sd-overlay > * { animation: mo-rise 0.32s cubic-bezier(0.34, 1.3, 0.64, 1); }
+@keyframes mo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mo-rise { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mo-burst { display: none; } }

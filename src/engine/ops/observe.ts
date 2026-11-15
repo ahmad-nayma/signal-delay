@@ -1,0 +1,149 @@
+// Science targets in Mission operations (spec: Science targets and downlink). An OBSERVE order is a command on the
+// light-delayed path; when it arrives the craft prices the picture with science.ts from its own orbit and mass,
+// observes, and keeps the picture in its image queue until a DSN pass sends it home. A picture is home one light
+// time after its last bit leaves the craft. Science returned at Mars and on Moon 3 is the weight of the targets home.
+import { DESTINATIONS, OPERATIONS } from '../data';
+import { observationPlan, SCIENCE_RULES, type ObservationPlan } from '../science';
+import { targetById, targetSetFor, type Target } from '../targets';
+import { OBJECTIVE_RULES, activeObjective, favouredWeight, objectiveMatched, targetWeight, type ObjectiveId } from '../objectives';
+import { inShadow } from './predictable';
+import { gameEstimate, type Sourced } from '../types';
+import type { ImageRecord, OpsEnvironment, OpsState } from './types';
+
+/** Game rules for the drag-heating hazard's rate (registered in the data audit). */
+export const OBSERVE_RULES = {
+  dragHeatingRate_perDay: gameEstimate(
+    0.004,
+    'per day at MAVEN’s nominal periapsis density',
+    'Game estimate (Science targets): the drag-heating hazard’s rate, scaled by ρ/ρ_nominal while a low pass or a deep dip lasts',
+  ),
+} satisfies Record<string, Sourced<number>>;
+
+/** Science targets decide the science: always at Mars, and at the Moon on a level that flies them (Moon 3). */
+export const hasTargets = (env: OpsEnvironment) =>
+  env.design.destination === 'mars' || (env.design.destination === 'moon' && env.design.scienceTargets === true);
+
+/** The targets this flight can order (none where the science is data downlinked). */
+export const targetsOf = (env: OpsEnvironment): Target[] => (hasTargets(env) ? (targetSetFor(env.design.destination)?.targets ?? []) : []);
+
+/**
+ * A Moon target on the far side: the craft passing over it is hidden from Earth (spec: Moon orbit), so it observes
+ * alone. Earth sits over the sub-Earth point (0°, 0°) of the body-fixed frame; the eclipse test with that direction.
+ */
+export function onFarSide(env: OpsEnvironment, t: Target): boolean {
+  if (t.body !== 'moon' || !t.lat_deg || !t.lon_deg) return false;
+  const R = DESTINATIONS.moon.radius_km.value * 1000;
+  const r = R + scienceOrbitOf(env).periapsis_km * 1000;
+  const la = (t.lat_deg.value * Math.PI) / 180;
+  const lo = (t.lon_deg.value * Math.PI) / 180;
+  return inShadow([r * Math.cos(la) * Math.cos(lo), r * Math.cos(la) * Math.sin(lo), r * Math.sin(la)], [1, 0, 0], R);
+}
+
+/** The orbit the craft flies in the science phase (altitudes, km) and its inclination. */
+export function scienceOrbitOf(env: OpsEnvironment) {
+  const d = env.design;
+  const o = d.scienceOrbit ?? d.captureOrbit;
+  return { periapsis_km: o.periapsis_km, apoapsis_km: o.apoapsis_km, inclination_deg: d.scienceOrbit?.inclination_deg ?? OPERATIONS.orbitDefaults.inclination_deg.value };
+}
+
+export function inDustSeason(ls: number | undefined): boolean {
+  const d = OPERATIONS.marsDust;
+  return ls !== undefined && ls >= d.seasonStartLs_deg.value && ls < d.seasonEndLs_deg.value;
+}
+
+/** What observing a target costs at time t: the craft's orbit and mass now, and that day's dust season. */
+export function observationFor(s: OpsState, target: Target, t = s.t): ObservationPlan {
+  const env = s.env;
+  const o = scienceOrbitOf(env);
+  const R_km = DESTINATIONS[env.design.destination].radius_km.value;
+  const day = env.days[Math.max(0, Math.min(Math.floor(t), env.horizonDay))]!;
+  return observationPlan(target, {
+    rp_m: (R_km + o.periapsis_km) * 1000,
+    ra_m: (R_km + o.apoapsis_km) * 1000,
+    inclination_deg: o.inclination_deg,
+    area_m2: (env.design.power.arrayArea_m2 ?? 0) + SCIENCE_RULES.busFace_m2.value,
+    mass_kg: s.mass_kg,
+    inDustSeason: inDustSeason(day.ls_deg),
+  });
+}
+
+/** The drag-heating factor of every observation under way at t (0 when none flies low). */
+export function dragFactorAt(s: OpsState, t: number): number {
+  return s.images.reduce((a, im) => (im.status !== 'refused' && im.startedAt <= t && t < im.takenAt ? a + im.dragFactor : a), 0);
+}
+
+/** Extra camera load at t (W). */
+export function observeLoadAt(s: OpsState, t: number): number {
+  return s.images.reduce((a, im) => (im.status !== 'refused' && im.startedAt <= t && t < im.takenAt ? a + im.load_W : a), 0);
+}
+
+/** The picture of a target, if it was ordered and not refused. */
+export const imageOf = (s: OpsState, targetId: string): ImageRecord | undefined =>
+  s.images.find((im) => im.targetId === targetId && im.status !== 'refused');
+
+/** A picture counts once its last bit has left the craft within the prime mission (it reaches Earth whatever happens next). */
+export const countsForScience = (s: OpsState, im: ImageRecord) =>
+  im.status === 'sent' && im.sentAt !== undefined && im.sentAt < s.env.primeEndDay + 1;
+
+export interface TargetScience {
+  /** Science returned, 0–1: Σ weights of the targets whose pictures came home. */
+  fraction: number;
+  /** Targets whose pictures came home (or are on their way home), in data order. */
+  home: string[];
+  /** Cut off part-way down when the craft was lost: share of the bits that made it. */
+  partial: { targetId: string; fraction: number }[];
+}
+
+export function targetScience(s: OpsState): TargetScience {
+  const home: string[] = [];
+  const partial: TargetScience['partial'] = [];
+  let fraction = 0;
+  for (const t of targetsOf(s.env)) {
+    const im = imageOf(s, t.id);
+    if (!im) continue;
+    if (countsForScience(s, im)) {
+      home.push(t.id);
+      fraction += targetWeight(s.env.design, t);
+    } else if (im.sentBits > 0 && im.bits > 0) partial.push({ targetId: t.id, fraction: im.sentBits / im.bits });
+  }
+  return { fraction: Math.min(1, fraction), home, partial };
+}
+
+/** Prime science returned, 0–1 (spec: Scoring): target weights at Mars and on Moon 3, data downlinked ÷ goal elsewhere. */
+export function scienceReturned(s: OpsState): number {
+  if (hasTargets(s.env)) return targetScience(s).fraction;
+  const sci = s.env.timeline.find((w) => w.phase === 'science')!;
+  const goal = s.env.loads.instruments.reduce((a, i) => a + i.data_bitsPerDay, 0) * (sci.endDay - sci.startDay + 1);
+  return goal > 0 ? Math.min(1, s.downlinkedPrime_bits / goal) : 0;
+}
+
+/** The first science has come home (with targets: the first picture sent; elsewhere: the first data). */
+export function firstScienceHome(s: OpsState): boolean {
+  return hasTargets(s.env) ? s.images.some((im) => countsForScience(s, im)) : s.downlinkedPrime_bits > 0;
+}
+
+export interface ObjectiveResult {
+  objective: ObjectiveId;
+  /** A matching instrument was packed. */
+  matched: boolean;
+  /** Share of the favoured targets' own (balanced) weight whose pictures came home, 0–1. */
+  favouredHome: number;
+  met: boolean;
+}
+
+/** How the flight did on its objective (undefined when it flies none). */
+export function objectiveResult(s: OpsState): ObjectiveResult | undefined {
+  const o = activeObjective(s.env.design);
+  if (!o) return undefined;
+  const matched = objectiveMatched(s.env.design, o);
+  const home = targetsOf(s.env)
+    .filter((t) => o.favours.includes(t.kind))
+    .reduce((a, t) => {
+      const im = imageOf(s, t.id);
+      return im && countsForScience(s, im) ? a + t.weight.value : a;
+    }, 0);
+  const favouredHome = home / favouredWeight(o);
+  return { objective: o.id, matched, favouredHome, met: matched && favouredHome >= OBJECTIVE_RULES.metFraction.value };
+}
+
+export { targetById };

@@ -1,0 +1,60 @@
+// Shared set-up for the component tests (jsdom). Not a test file itself.
+import { setLang } from '../../src/ui/i18n';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { afterEach, beforeEach, vi } from 'vitest';
+import { RELAY_CONFIG } from '../../src/engine/team/room';
+import type { ObjectiveId } from '../../src/engine/objectives';
+import { NAV, OBJECTIVE_WORDS } from '../../src/ui/sdWords';
+import { inlineRunner, setRiskRunner } from '../../src/ui/riskRunner';
+
+// jsdom has no Web Worker: the Risk meter's Monte Carlo runs inline, with fewer runs (each one is still a full
+// Mission operations flight through the engine).
+export const TEST_RISK_RUNS = 20;
+setRiskRunner(inlineRunner(), TEST_RISK_RUNS);
+
+// No network in component tests: the Online Room's relay project (online.json) is blanked, so a room is "not set up"
+// unless a test injects an in-memory relay (injectRelay).
+RELAY_CONFIG.url = '';
+RELAY_CONFIG.publishableKey = '';
+
+beforeEach(() => {
+  // jsdom has no layout: scrolling is a no-op, and every test starts from empty storage.
+  window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+  localStorage.clear();
+  // The robot already has a name screen behind it (tests/ui/nameRobot.test.tsx clears this to see the screen).
+  localStorage.setItem('sd.seen', JSON.stringify(['name']));
+  // No network in component tests: the DONKI snapshot cannot be read, so the Daily is offline (tests/ui/donki.test.ts
+  // stubs its own responses).
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new TypeError('no network in tests');
+    }),
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  // every test starts in English (the language lives in the page as well as in storage)
+  setLang('en');
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+/** Unlock the map up to Mars and open the Mars level from Home (Pack with every part). */
+export function openMarsLevel(render: () => void, click: (el: Element) => void, getByRole: (role: string, opts: { name: RegExp }) => Element) {
+  localStorage.setItem('mdt.progress', JSON.stringify({ 'moon-1': 1, 'moon-2': 1, 'moon-3': 1 }));
+  render();
+  click(getByRole('button', { name: /^CHOOSE A MISSION/ }));
+  click(getByRole('button', { name: /^Red Planet/ }));
+}
+
+/**
+ * Red Planet asks a solo player for the mission objective before launch (spec UI rule 56): pick it in the briefing
+ * and close it. Atmosphere is the default: the starter craft carries the sniffer, so the packing plays as before.
+ */
+export function pickObjective(id: ObjectiveId = 'atmosphere') {
+  const title = OBJECTIVE_WORDS.objectives[id].title;
+  fireEvent.click(screen.getByRole('radio', { name: new RegExp(`^${title}`) }));
+  fireEvent.click(screen.getByRole('button', { name: NAV.start }));
+}

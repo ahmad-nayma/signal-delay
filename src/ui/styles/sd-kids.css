@@ -1,0 +1,187 @@
+/* SPACE KIDS / PETIT ASTRONAUTE (screens/KidsMode.tsx): Cadet's loop for young children, with a warm, playful look on
+   the project palette. Big type, short lines, very round corners, the accent orange and yellow up front; touch
+   targets of 96 px and more. */
+.kd { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; gap: 18px; padding: 18px 24px 28px; box-sizing: border-box; background: radial-gradient(90% 60% at 30% 20%, rgba(255, 153, 0, 0.14), transparent 70%), radial-gradient(70% 50% at 85% 90%, rgba(0, 210, 255, 0.12), transparent 70%), var(--ds-primary); color: var(--sd-ink); }
+.kd-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.kd-title { margin: 0; display: inline-flex; align-items: center; gap: 10px; font: 800 26px/1 var(--sd-tech); letter-spacing: 0.06em; color: var(--ds-accent-2); text-shadow: 0 2px 14px rgba(255, 153, 0, 0.35); }
+.kd-main { flex: 1; display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr); gap: 28px; align-items: center; max-width: 1200px; width: 100%; margin: 0 auto; }
+.kd-report .kd-main { align-items: start; }
+
+/* The stage: the rocket, the trip or the report's stars */
+.kd-stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 320px; padding: 20px; border-radius: 36px; background: radial-gradient(circle at 50% 40%, rgba(0, 153, 255, 0.18), transparent 65%), var(--sd-deeper); box-shadow: var(--sd-shadow-card); overflow: hidden; }
+
+/* The rocket: nose up, the packed parts in its windows */
+.kd-rocket-box { position: relative; width: min(300px, 70vw); }
+.kd-rocket { display: block; width: 100%; height: auto; max-height: 56vh; overflow: visible; }
+.kd-body { fill: #f7fbff; stroke: var(--ds-primary-2); stroke-width: 4; }
+.kd-band { stroke: var(--ds-accent); stroke-width: 10; }
+.kd-wing { fill: var(--ds-accent); stroke: var(--ds-primary-2); stroke-width: 4; stroke-linejoin: round; }
+.kd-cone { fill: #ff5a3d; stroke: var(--ds-primary-2); stroke-width: 4; stroke-linejoin: round; }
+.kd-nozzle { fill: #8aa1b8; stroke: var(--ds-primary-2); stroke-width: 4; stroke-linejoin: round; }
+.kd-flame { fill: var(--ds-accent-2); stroke: #ff5a3d; stroke-width: 3; transform-box: fill-box; transform-origin: top center; animation: kd-flicker 0.5s ease-in-out infinite alternate; }
+@keyframes kd-flicker { from { transform: scaleY(0.85); } to { transform: scaleY(1.1); } }
+/* The hold: the parts sit in the rocket's body (x 58–142, y 96–212 of the 200 × 340 drawing) */
+.kd-hold { position: absolute; left: 29%; right: 29%; top: 31%; bottom: 36%; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; justify-items: center; gap: 6px; }
+.kd-hold-part { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--ds-secondary); border: 3px solid var(--ds-primary-2); animation: kd-pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes kd-pop { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+
+/* Sparkles: eight stars flying out from the rocket */
+.kd-sparkles { position: absolute; left: 50%; top: 45%; width: 0; height: 0; pointer-events: none; }
+.kd-spark { position: absolute; left: -11px; top: -11px; opacity: 0; animation: kd-spark 0.9s ease-out forwards; }
+.kd-spark.s0 { --dx: 0px; --dy: -140px; }
+.kd-spark.s1 { --dx: 100px; --dy: -100px; }
+.kd-spark.s2 { --dx: 140px; --dy: 0px; }
+.kd-spark.s3 { --dx: 100px; --dy: 100px; }
+.kd-spark.s4 { --dx: 0px; --dy: 140px; }
+.kd-spark.s5 { --dx: -100px; --dy: 100px; }
+.kd-spark.s6 { --dx: -140px; --dy: 0px; }
+.kd-spark.s7 { --dx: -100px; --dy: -100px; }
+@keyframes kd-spark { 0% { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0deg); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.2) rotate(180deg); } }
+
+/* The trip: Earth on the left, the destination on the right, the rocket on a dotted path (--kd-at: 0–1, engine) */
+.kd-trip { --kd-at: 0; flex-direction: row; justify-content: space-between; min-height: 300px; padding: 24px 22px; }
+.kd-earth { flex: none; width: 76px; height: 76px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #7fd4ff, var(--ds-secondary-2) 55%, #0b4a8a); box-shadow: 0 0 24px rgba(0, 210, 255, 0.45); }
+.kd-goal { flex: none; width: 120px; height: 120px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 30px rgba(255, 173, 0, 0.35); transition: transform var(--sd-slow, 0.6s) var(--sd-ease, ease); }
+.kd-trip.leg-arrive .kd-goal, .kd-trip.leg-explore .kd-goal, .kd-trip.leg-done .kd-goal { transform: scale(1.25); }
+.kd-path { position: absolute; left: 110px; right: 150px; top: 50%; height: 0; border-top: 4px dotted rgba(255, 255, 255, 0.25); }
+.kd-path-fill { position: absolute; left: 0; top: -4px; height: 4px; width: calc(var(--kd-at) * 100%); background: var(--ds-accent-2); border-radius: 4px; transition: width 0.28s linear; }
+.kd-ship { position: absolute; top: 50%; left: calc(110px + (100% - 260px) * var(--kd-at)); transform: translate(-50%, -50%) rotate(90deg); transition: left 0.28s linear; }
+.kd-rocket-box.small { width: 70px; }
+.kd-rocket.lit .kd-flame { animation-duration: 0.2s; }
+
+/* The story: the robot and its speech bubble, then the choices */
+.kd-story { display: flex; flex-direction: column; gap: 22px; }
+.kd-talk { display: flex; align-items: flex-end; gap: 14px; }
+.kd-mascot { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.kd-mascot.happy .kd-bot { animation: kd-hop 0.7s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes kd-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-14px) rotate(-4deg); } }
+.kd-bot { width: 104px; height: auto; }
+.kd-bot-head { fill: var(--ds-character); stroke: var(--ds-primary-2); stroke-width: 4; }
+.kd-bot-face { fill: var(--ds-primary-2); }
+.kd-bot-eyes circle { fill: var(--ds-secondary); transform-box: fill-box; transform-origin: center; animation: kd-blink 4s infinite; }
+@keyframes kd-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.kd-bot-smile { fill: none; stroke: var(--ds-secondary); stroke-width: 4; stroke-linecap: round; }
+.kd-bot-line { stroke: var(--ds-primary-2); stroke-width: 4; stroke-linecap: round; }
+.kd-bot-light { fill: var(--ds-accent-2); }
+.kd-name { font: 700 14px/1 var(--sd-display); letter-spacing: 0.12em; color: var(--ds-character-2); }
+.kd-bubble { position: relative; flex: 1; padding: 20px 24px; border-radius: 30px; background: #ffffff; color: var(--ds-primary); box-shadow: var(--sd-shadow-card); }
+.kd-bubble::before { content: ''; position: absolute; left: -12px; bottom: 26px; border: 12px solid transparent; border-right-color: #ffffff; border-left: 0; }
+.kd-bubble p { margin: 0; font: 700 clamp(22px, 2.6vw, 30px)/1.25 var(--sd-display); text-wrap: balance; }
+.kd-bubble p + p { margin-top: 6px; }
+.kd-bubble.cheer { background: var(--ds-accent-2); animation: kd-hop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.kd-bubble.cheer::before { border-right-color: var(--ds-accent-2); }
+
+/* Choices: big round picture cards */
+.kd-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.kd-choices.snaps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kd-choice { position: relative; cursor: pointer; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px 10px; border-radius: 32px; border: 4px solid transparent; background: var(--sd-panel); color: var(--sd-ink); box-shadow: var(--sd-shadow-card); }
+.sd .kd-choice:hover:not(:disabled) { border-color: var(--ds-accent-2); transform: translateY(-4px) rotate(-1deg); box-shadow: 0 0 0 4px rgba(255, 173, 0, 0.25), var(--sd-shadow-card); }
+.kd-choice.on { border-color: var(--ds-accent-2); background: #12335a; }
+.kd-choice-name { font: 700 19px/1.15 var(--sd-display); text-align: center; letter-spacing: 0.01em; }
+.kd-choice.photo { padding: 10px 10px 14px; }
+.kd-choice-photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 22px; display: block; }
+.kd-choice.snap .kd-choice-name { font-size: 15px; }
+
+/* A part on the shelf: its picture, a tick once packed; the one the robot still needs shines */
+.kd-part-pic { position: relative; display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%; background: rgba(0, 210, 255, 0.12); color: var(--ds-secondary); }
+.kd-choice.on .kd-part-pic { background: var(--ds-secondary); color: var(--ds-primary); }
+.kd-part-tick { position: absolute; right: -6px; top: -6px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ds-accent-2); }
+.kd-choice.need { border-color: var(--ds-accent-2); animation: kd-shine 1.2s ease-in-out infinite; }
+@keyframes kd-shine { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 173, 0, 0.6), var(--sd-shadow-card); } 50% { box-shadow: 0 0 0 12px rgba(255, 173, 0, 0), var(--sd-shadow-card); } }
+
+/* A danger: its big picture and two big answers */
+.kd-bubble.alert { background: #ffe6c7; }
+.kd-bubble.alert::before { border-right-color: #ffe6c7; }
+.kd-card { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 18px; border-radius: 30px; background: var(--sd-panel); box-shadow: var(--sd-shadow-card); animation: kd-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.kd-card-pic { display: grid; place-items: center; width: 110px; height: 110px; border-radius: 50%; background: rgba(255, 153, 0, 0.14); animation: kd-hop 1.4s ease-in-out infinite; }
+.kd-card-keys { flex: 1; display: flex; flex-wrap: wrap; gap: 14px; }
+.kd-card-keys .kd-big { flex: 1; align-self: stretch; padding: 0 20px; font-size: 24px; }
+
+/* Big keys: start, lift off, pictures, again */
+.kd-big { cursor: pointer; align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 84px; padding: 0 40px; border-radius: 999px; border: none; border-bottom: 6px solid var(--sd-amber-edge); background: var(--ds-accent); color: var(--ds-primary-2); font: 800 28px/1 var(--sd-display); letter-spacing: 0.04em; box-shadow: 0 10px 26px rgba(255, 153, 0, 0.35); animation: kd-breathe 1.8s ease-in-out infinite; }
+.sd .kd-big:hover:not(:disabled) { background: var(--ds-accent-2); }
+.kd-big:disabled { cursor: default; opacity: 0.4; animation: none; box-shadow: none; }
+.kd-big.ghost { background: transparent; color: var(--ds-secondary); border: 4px solid var(--ds-secondary); box-shadow: none; animation: none; }
+.sd .kd-big.ghost:hover { background: rgba(0, 210, 255, 0.12); }
+.kd-launch { min-height: 110px; padding: 0 56px; font-size: 38px; }
+@keyframes kd-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+.kd-end { display: flex; flex-wrap: wrap; gap: 14px; }
+
+/* The report: the destination's photo behind big stars, the pictures home, a part for next time */
+.kd-report-stage { min-height: 300px; }
+.kd-arrive { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.55; animation: kd-arrive 1.4s ease-out both; }
+@keyframes kd-arrive { from { opacity: 0; transform: scale(1.25); } to { opacity: 0.55; transform: scale(1); } }
+.kd-stars { position: relative; display: flex; gap: 10px; }
+.kd-star-slot { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 50%; background: rgba(0, 29, 58, 0.7); opacity: 0.5; }
+.kd-star-slot.on { opacity: 1; animation: kd-pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) both; box-shadow: 0 0 26px rgba(255, 173, 0, 0.5); }
+.kd-star-slot.on:nth-child(2) { animation-delay: 0.25s; }
+.kd-star-slot.on:nth-child(3) { animation-delay: 0.5s; }
+.kd-album { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 26px; background: var(--sd-panel); box-shadow: var(--sd-shadow-card); }
+.kd-album ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kd-album li { display: flex; flex-direction: column; gap: 6px; font: 700 14px/1.2 var(--sd-display); text-align: center; }
+.kd-album img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; display: block; }
+.kd-album .kd-real-k { color: var(--ds-accent-2); }
+.kd-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 26px; background: #fff4e0; color: var(--ds-primary); font: 700 20px/1.25 var(--sd-display); }
+.kd-hint-part { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 6px 8px; border-radius: 999px; background: var(--ds-secondary); }
+
+/* The SPACE KIDS key beside the Cadet / Engineer lever (components/sd/ModeLever.tsx) */
+.sd-kids-key { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px 0 10px; border-radius: 999px; border: 2px solid var(--ds-accent-2); background: linear-gradient(135deg, var(--ds-accent), var(--ds-accent-2)); color: var(--ds-primary-2); font: 800 12px/1 var(--sd-display); letter-spacing: 0.1em; white-space: nowrap; box-shadow: 0 4px 16px rgba(255, 153, 0, 0.35); }
+.sd .sd-kids-key:hover { transform: translateY(-2px) rotate(-1deg); box-shadow: 0 6px 22px rgba(255, 173, 0, 0.5); }
+.sd-kids-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--ds-primary-2); }
+
+/* The real NASA photo and the true facts (report) */
+.kd-real { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 18px; padding: 18px; border-radius: 30px; background: #ffffff; color: var(--ds-primary); box-shadow: var(--sd-shadow-card); }
+.kd-real-k { grid-column: 1 / -1; font: 800 13px/1 var(--sd-display); letter-spacing: 0.14em; color: #c25e00; }
+.kd-real-img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 20px; display: block; }
+.kd-real-body { display: flex; flex-direction: column; gap: 6px; }
+.kd-real-title { font: 800 22px/1.15 var(--sd-display); }
+.kd-real-caption { font: 500 15px/1.4 var(--sd-body); color: #2b4560; }
+.kd-real-credit { font: 500 11px/1.3 var(--sd-body); color: #5d7690; }
+.kd-facts { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 3px dotted rgba(0, 29, 58, 0.15); }
+.kd-facts ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.kd-facts li { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 18px; background: #fff4e0; font: 700 clamp(17px, 1.8vw, 21px)/1.3 var(--sd-display); }
+.kd-facts li > svg { flex: none; }
+.kd-real .info-btn { margin-left: 6px; vertical-align: middle; color: #2b4560; border-color: rgba(0, 29, 58, 0.3); }
+
+@media (max-width: 760px) {
+  .kd { padding: 14px 16px 22px; gap: 14px; }
+  .kd-title { min-width: 0; font-size: 14px; gap: 6px; text-align: center; }
+  .kd-title > svg { display: none; }
+  .kd-main { grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+  .kd-stage { min-height: 0; padding: 14px; border-radius: 28px; }
+  .kd-rocket-box { width: min(180px, 50vw); }
+  .kd-rocket { max-height: 34vh; }
+  .kd-hold-part { width: 30px; height: 30px; border-width: 2px; }
+  .kd-hold-part svg { width: 18px; height: 18px; }
+  .kd-trip { min-height: 150px; padding: 16px 14px; }
+  .kd-earth { width: 48px; height: 48px; }
+  .kd-goal { width: 74px; height: 74px; }
+  .kd-path { left: 70px; right: 96px; }
+  .kd-ship { left: calc(70px + (100% - 166px) * var(--kd-at)); }
+  .kd-rocket-box.small { width: 46px; }
+  .kd-bot { width: 78px; }
+  .kd-bubble { padding: 14px 18px; border-radius: 24px; }
+  .kd-bubble p { font-size: 21px; }
+  .kd-choices { gap: 10px; }
+  .kd-choices.snaps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kd-choice { min-height: 120px; border-radius: 26px; padding: 12px 6px; }
+  .kd-part-pic { width: 64px; height: 64px; }
+  .kd-part-pic svg { width: 40px; height: 40px; }
+  .kd-choice-name { font-size: 15px; }
+  .kd-card-pic { width: 80px; height: 80px; }
+  .kd-big { align-self: stretch; min-height: 76px; font-size: 24px; padding: 0 24px; }
+  .kd-launch { min-height: 96px; font-size: 32px; }
+  .kd-end .kd-big { flex: 1; }
+  .kd-report-stage { min-height: 150px; }
+  .kd-star-slot { width: 70px; height: 70px; }
+  .kd-star-slot svg { width: 46px; height: 46px; }
+  .kd-real { grid-template-columns: minmax(0, 1fr); padding: 14px; border-radius: 24px; }
+  .kd-real-title { font-size: 19px; }
+  .kd-facts li { font-size: 16px; }
+  .kd-hint { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kd-big, .kd-flame, .kd-bot-eyes circle, .kd-choice.need, .kd-card-pic, .kd-arrive, .kd-star-slot.on, .kd-hold-part, .kd-card { animation: none; }
+  .kd-arrive { opacity: 0.55; }
+  .kd-ship, .kd-path-fill, .kd-goal { transition: none; }
+}

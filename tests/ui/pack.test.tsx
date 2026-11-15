@@ -1,0 +1,334 @@
+// @vitest-environment jsdom
+// PACK (Signal Delay screen 02): the nose is volume, weight is a separate limit; every number is pack.ts /
+// evaluateDesign output. The Mars level (all parts) and the Moon and Jupiter lessons.
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { evaluateDesign } from '../../src/engine/index';
+import { buildPackDesign, initialPack, levelCostCap, noseSquares, packBlockers, packLimits, packPart, shelfFor } from '../../src/engine/pack';
+import { App } from '../../src/ui/App';
+import * as f from '../../src/ui/format';
+import { LEVELS, loadProgress, shelfOf } from '../../src/ui/levels';
+import { starterDesign, today } from '../../src/ui/starters';
+import { LAUNCH_DAY_WORDS, LIMIT_WORDS, ORBIT_WORDS, PACK_BLOCKER, PREVIEW_WORDS, ROCKET_WORDS, SIDE_TABS } from '../../src/ui/sdWords';
+import { orbitCards } from '../../src/engine/orbitPresets';
+import { loadLevelPacks } from '../../src/ui/saves';
+import { pickObjective } from './setup';
+
+function pass(ms: number, step = 50) {
+  for (let t = 0; t < ms; t += step) act(() => vi.advanceTimersByTime(step));
+}
+
+function openLevel(title: RegExp, progress: Record<string, number>) {
+  vi.useFakeTimers();
+  localStorage.setItem('mdt.progress', JSON.stringify(progress));
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'CHOOSE A MISSION ▸' }));
+  fireEvent.click(screen.getByRole('button', { name: title }));
+  pass(100); // the calendar is worked out one tick after the screen paints
+  if (title.source.includes('Red Planet')) pickObjective();
+}
+
+const MARS = { 'moon-1': 1, 'moon-2': 1, 'moon-3': 1 };
+
+describe('Pack: the nose and the shelf', () => {
+  it('opens with the locked computer and engine plus the starter’s instruments; squares left come from the engine', () => {
+    openLevel(/^Red Planet/, MARS);
+    const base = starterDesign('mars', today());
+    const p = initialPack(base, shelfFor('mars'));
+    expect(screen.getByText(`${f.num(noseSquares(p).free)} SQUARES LEFT`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Flight computer (always packed)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Main engine (always packed)' })).toBeTruthy();
+  });
+
+  it('tap a shelf part to pack it, tap it in the nose to unpack it', () => {
+    openLevel(/^Red Planet/, MARS);
+    const before = screen.getByText(/SQUARES LEFT/).textContent!;
+    fireEvent.click(screen.getByRole('button', { name: 'Pack Radiation shield' }));
+    expect(screen.getByText(/SQUARES LEFT/).textContent).not.toBe(before);
+    expect(screen.queryByRole('button', { name: 'Pack Radiation shield' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Unpack Radiation shield' }));
+    expect(screen.getByText(/SQUARES LEFT/).textContent).toBe(before);
+  });
+
+  it('the danger deck stamps react to what is packed (two parts cover eclipse season)', () => {
+    openLevel(/^Red Planet/, MARS);
+    // the deck sits on its own tab beside LIVE DESIGN PREVIEW
+    fireEvent.click(screen.getByRole('tab', { name: SIDE_TABS.dangers }));
+    const deck = within(screen.getByRole('list', { name: 'Danger deck' }));
+    expect(deck.getByRole('listitem', { name: 'ECLIPSE SEASON: NOT COVERED' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pack Extra solar panel' }));
+    expect(deck.getByRole('listitem', { name: 'ECLIPSE SEASON: SOME COVER' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pack Big battery' }));
+    expect(deck.getByRole('listitem', { name: 'ECLIPSE SEASON: COVERED' })).toBeTruthy();
+  });
+
+  it('LIVE DESIGN PREVIEW opens first, where the deck was, and redraws the moment a part is packed or unpacked', () => {
+    openLevel(/^Red Planet/, MARS);
+    expect(screen.getByRole('tab', { name: SIDE_TABS.preview }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('list', { name: 'Danger deck' })).toBeNull();
+    const preview = () => within(screen.getByRole('region', { name: PREVIEW_WORDS.label }));
+    const count = () => preview().getAllByRole('listitem').length;
+    const before = count();
+    fireEvent.click(screen.getByRole('button', { name: 'Pack Radiation shield' }));
+    expect(count()).toBe(before + 1);
+    expect(preview().getByText('Radiation shield')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Unpack Radiation shield' }));
+    expect(count()).toBe(before);
+    expect(preview().queryByText('Radiation shield')).toBeNull();
+  });
+
+  it('a part with no free slot cannot be packed and says why: no room in the nose', () => {
+    openLevel(/^Red Planet/, MARS);
+    for (const name of ['Extra fuel tank', 'Radiation shield', 'Big dish antenna', 'Camera', 'Extra solar panel', 'Debris bumper', 'Spectrometer', 'Big battery', 'Autopilot chip']) {
+      const b = screen.queryByRole('button', { name: `Pack ${name}` });
+      if (b) fireEvent.click(b);
+    }
+    const nofit = screen.getAllByRole('button', { name: /\(no room\)$/ });
+    expect(nofit.length).toBeGreaterThan(0);
+    fireEvent.click(nofit[0]!);
+    expect(screen.getByText(/NO ROOM IN THE NOSE/)).toBeTruthy();
+  });
+});
+
+describe('Pack: weight, launch day, arm and launch', () => {
+  it('the weight scale beside the nose is the launch meter; overloading names the limit: too heavy for this rocket', () => {
+    const base = starterDesign('mars', today());
+    const p = initialPack(base, shelfFor('mars'));
+    const heavy = { ...buildPackDesign(base, p), propellant_kg: 20000 };
+    expect(packBlockers(p, evaluateDesign(heavy)).map((b) => b.code)).toContain('too-heavy');
+    openLevel(/^Red Planet/, MARS);
+    expect(screen.getByRole('meter', { name: 'Weight' })).toBeTruthy();
+    expect(screen.getByText('LIGHT ENOUGH')).toBeTruthy();
+  });
+
+  it('LAUNCH needs the arm lever; a Cadet flies on the best day, picked for them', () => {
+    openLevel(/^Red Planet/, MARS);
+    expect(screen.getByText(LAUNCH_DAY_WORDS.auto)).toBeTruthy();
+    expect(screen.queryByRole('radiogroup', { name: 'Launch day' })).toBeNull(); // the calendar is its own step
+    const go = screen.getByRole('button', { name: 'LAUNCH' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('switch', { name: 'Arm' }));
+    expect(go.disabled).toBe(false); // the best day is good
+    fireEvent.click(go);
+    pass(100);
+    expect(screen.getByRole('list', { name: 'Robot resources' })).toBeTruthy();
+  });
+
+  it('CHANGE ▸ opens the Launch Day step: six weeks of days; a bad day blocks LAUNCH; the pick is kept on Pack', () => {
+    openLevel(/^Red Planet/, MARS);
+    fireEvent.click(screen.getByRole('button', { name: LAUNCH_DAY_WORDS.change }));
+    pass(100);
+    const days = within(screen.getByRole('radiogroup', { name: 'Launch day' })).getAllByRole('radio');
+    expect(days.length).toBe(42);
+    fireEvent.click(screen.getByRole('switch', { name: 'Arm' }));
+    const go = screen.getByRole('button', { name: 'LAUNCH' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(false);
+    const bad = days.find((d) => /BAD$/.test(d.getAttribute('aria-label')!));
+    if (bad) {
+      fireEvent.click(bad);
+      expect(go.disabled).toBe(true);
+    }
+    fireEvent.click(days[20]!);
+    expect(screen.getAllByText(LAUNCH_DAY_WORDS.yours).length).toBeGreaterThan(0);
+    // ◂ BACK to packing: the picked day is shown as yours
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    pass(100);
+    expect(screen.getByText(LAUNCH_DAY_WORDS.yours)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pack Big battery' })).toBeTruthy();
+  });
+
+  it('the Launch Day step shows the Engineer numbers when the lever is flipped there', () => {
+    openLevel(/^Red Planet/, MARS);
+    fireEvent.click(screen.getByRole('button', { name: LAUNCH_DAY_WORDS.change }));
+    pass(100);
+    fireEvent.click(screen.getByRole('switch', { name: 'Engineer mode' }));
+    pass(100);
+    expect(screen.getByRole('radiogroup', { name: 'Launch day' })).toBeTruthy();
+    expect(screen.getByText(LAUNCH_DAY_WORDS.c3)).toBeTruthy();
+  });
+});
+
+describe('Pack: levels', () => {
+  it('Moon 1 teaches power: a small shelf', () => {
+    openLevel(/^First Light/, {});
+    expect(screen.getByRole('button', { name: 'Pack Extra solar panel' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pack Radiation shield' })).toBeNull();
+  });
+
+  it('every level’s starting pack is flyable, except Jupiter, which no rocket can throw there directly', () => {
+    for (const l of LEVELS) {
+      const base = starterDesign(l.destination, today());
+      const p = initialPack(base, shelfOf(l));
+      const b = packBlockers(p, evaluateDesign(buildPackDesign(base, p)));
+      if (l.impossible) expect(b.map((x) => x.code), l.id).toContain('too-heavy');
+      else expect(b, l.id).toEqual([]);
+    }
+  });
+
+  it('Jupiter: the lesson card shows the sourced Juno story and gives the star', () => {
+    openLevel(/^Giant Leap/, Object.fromEntries(LEVELS.slice(0, -1).map((l) => [l.id, 1])));
+    expect(screen.getByText(/TOO HEAVY FOR THIS ROCKET/)).toBeTruthy();
+    expect(screen.getByText(/gravity assist/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Source of the lesson/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '★ LESSON LEARNED' }));
+    expect(loadProgress().jupiter).toBe(1);
+  });
+});
+
+describe('Pack: "no fuel" says which part fixes it', () => {
+  it('Moon 3: the radar, big dish, solar and battery without the tank → pack the extra tank for the trim burns', () => {
+    openLevel(/^Full Build/, { 'moon-1': 1, 'moon-2': 1 });
+    for (const name of ['Radar sounder', 'Big dish antenna', 'Extra solar panel', 'Big battery']) {
+      const b = screen.queryByRole('button', { name: `Pack ${name}` });
+      if (b) fireEvent.click(b);
+    }
+    const unpack = screen.queryByRole('button', { name: 'Unpack Extra fuel tank' });
+    if (unpack) fireEvent.click(unpack);
+    pass(100);
+    expect(screen.getByText(/NOT ENOUGH FUEL/)).toBeTruthy();
+    expect(screen.getByText('PACK THE EXTRA FUEL TANK — THE 50 KM ORBIT NEEDS TRIM BURNS EVERY MONTH')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pack Extra fuel tank' }));
+    pass(100);
+    expect(screen.queryByText(/NOT ENOUGH FUEL/)).toBeNull();
+    expect(screen.queryByText(/PACK THE EXTRA FUEL TANK/)).toBeNull();
+  });
+});
+
+describe('MISSION LIMITS on solo Pack (spec UI rule 57): Cloud Diver teaches budget', () => {
+  const VENUS = { 'moon-1': 1, 'moon-2': 1, 'moon-3': 1, mars: 1 };
+  const venus = () => ({ ...starterDesign('venus', today()), costCap: levelCostCap('venus')! });
+  const limitsOf = (p: ReturnType<typeof initialPack>) => packLimits(evaluateDesign(buildPackDesign(venus(), p)));
+  const panel = () => screen.getByRole('region', { name: LIMIT_WORDS.label });
+  const row = (key: 'weight' | 'budget' | 'power' | 'data') => within(panel()).getByText(LIMIT_WORDS.names[key]).closest<HTMLElement>('.ml-row')!;
+
+  it('four bars from the engine, the budget held to the level’s 350 $M and nearly full with the starter', () => {
+    openLevel(/^Cloud Diver/, VENUS);
+    const budget = limitsOf(initialPack(venus(), shelfFor('venus'))).find((l) => l.key === 'budget')!;
+    expect(budget.limit).toBe(350);
+    for (const k of ['weight', 'budget', 'power', 'data'] as const) expect(row(k)).toBeTruthy();
+    expect(within(row('budget')).getByText(LIMIT_WORDS.value.budget(f.money(budget.used), f.money(350)))).toBeTruthy();
+    expect(within(row('budget')).getByText(LIMIT_WORDS.status.warning)).toBeTruthy();
+  });
+
+  it('hovering the camera previews it going over budget; packing it blocks launch; dropping the spectrometer pays for it', () => {
+    openLevel(/^Cloud Diver/, VENUS);
+    const p0 = initialPack(venus(), shelfFor('venus'));
+    const camera = screen.getByRole('button', { name: 'Pack Camera' });
+    fireEvent.mouseEnter(camera);
+    expect(within(panel()).getByText(LIMIT_WORDS.preview('Camera'))).toBeTruthy();
+    const after = limitsOf(packPart(p0, 'camera')!).find((l) => l.key === 'budget')!;
+    expect(within(row('budget')).getByText(LIMIT_WORDS.value.budget(f.money(after.used), f.money(350)))).toBeTruthy();
+    expect(within(row('budget')).getByText(LIMIT_WORDS.status.over)).toBeTruthy();
+    fireEvent.mouseLeave(camera);
+    expect(within(panel()).queryByText(LIMIT_WORDS.preview('Camera'))).toBeNull();
+
+    fireEvent.click(camera);
+    expect(screen.getByText(`· ${PACK_BLOCKER['over-budget']}`)).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Arm' }));
+    expect((screen.getByRole('button', { name: 'LAUNCH' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Unpack Spectrometer' }));
+    expect(screen.queryByText(`· ${PACK_BLOCKER['over-budget']}`)).toBeNull();
+    expect((screen.getByRole('button', { name: 'LAUNCH' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('every other level keeps NASA’s cap: Red Planet’s budget bar is held to 500 $M', () => {
+    openLevel(/^Red Planet/, MARS);
+    expect(row('budget').querySelector('.ml-v')!.textContent!.endsWith(` OF ${f.money(500)}`)).toBe(true);
+  });
+});
+
+describe('ROCKET on solo Pack (spec UI rule 58)', () => {
+  /** Desktop: the rocket sits behind its tab under MISSION LIMITS. */
+  const group = () => {
+    const tab = screen.queryByRole('tab', { name: SIDE_TABS.rocket });
+    if (tab && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
+    return screen.getByRole('radiogroup', { name: ROCKET_WORDS.label });
+  };
+  const option = (name: RegExp) => within(group()).getByRole('radio', { name });
+  const limitRow = (key: 'weight' | 'budget') =>
+    within(screen.getByRole('region', { name: LIMIT_WORDS.label })).getByText(LIMIT_WORDS.names[key]).closest<HTMLElement>('.ml-row')!;
+  const liftText = (el: HTMLElement) => el.querySelector('.rk-lift')!.firstChild!.textContent!;
+
+  it('Red Planet: the standard 401 is free; the 411 lifts more for 20 $M on the budget, and picking it moves both bars', () => {
+    openLevel(/^Red Planet/, MARS);
+    expect(within(group()).getAllByRole('radio')).toHaveLength(2);
+    const a = option(/Atlas V 401/);
+    const b = option(/Atlas V 411/);
+    expect(a.getAttribute('aria-checked')).toBe('true');
+    expect(within(a).getByText(ROCKET_WORDS.standard)).toBeTruthy();
+    // 130 − 110 = +20 $M (prices are game estimates)
+    expect(within(b).getByText(ROCKET_WORDS.charge(f.signedMoney(20)))).toBeTruthy();
+    expect(within(a).getByText(ROCKET_WORDS.record(f.num(40), f.num(41)))).toBeTruthy();
+    const budgetBefore = limitRow('budget').querySelector('.ml-v')!.textContent;
+    const lift411 = liftText(b);
+    fireEvent.click(b);
+    expect(option(/Atlas V 411/).getAttribute('aria-checked')).toBe('true');
+    // the weight bar's limit is now what the 411 lifts; the budget bar carries the 20 $M
+    expect(limitRow('weight').querySelector('.ml-v')!.textContent!.endsWith(lift411.replace(ROCKET_WORDS.lifts(''), ''))).toBe(true);
+    expect(limitRow('budget').querySelector('.ml-v')!.textContent).not.toBe(budgetBefore);
+  });
+
+  it('the Moon offers LRO’s shared ride: its 1,000 kg slot becomes the weight limit, and it costs less than the 401', () => {
+    openLevel(/^First Light/, {});
+    expect(within(group()).getAllByRole('radio')).toHaveLength(3);
+    const ride = option(/SHARED RIDE/);
+    expect(liftText(ride)).toBe(ROCKET_WORDS.lifts(f.kg(1000)));
+    expect(ride.querySelector('.rk-cost.down')).toBeTruthy();
+    fireEvent.click(ride);
+    expect(limitRow('weight').querySelector('.ml-v')!.textContent!.endsWith(` OF ${f.kg(1000)}`)).toBe(true);
+  });
+
+  it('the pick is saved with the packing: reopening the level after a reload keeps the 411', () => {
+    openLevel(/^Red Planet/, MARS);
+    fireEvent.click(option(/Atlas V 411/));
+    cleanup();
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CHOOSE A MISSION ▸' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Red Planet/ }));
+    pass(100);
+    expect(option(/Atlas V 411/).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Giant Leap: neither rocket lifts the Jupiter craft', () => {
+    openLevel(/^Giant Leap/, { 'moon-1': 1, 'moon-2': 1, 'moon-3': 1, mars: 1, venus: 1, bennu: 1 });
+    for (const r of within(group()).getAllByRole('radio')) expect(within(r).getByText(ROCKET_WORDS.tooHeavy)).toBeTruthy();
+  });
+});
+
+describe('SCIENCE ORBIT on the Mars Pack (spec UI rule 59)', () => {
+  const orbitGroup = () => {
+    const tab = screen.queryByRole('tab', { name: SIDE_TABS.orbit });
+    if (tab && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
+    return screen.getByRole('radiogroup', { name: ORBIT_WORDS.label });
+  };
+  const card = (id: 'capture' | 'maven' | 'high') => within(orbitGroup()).getByRole('radio', { name: new RegExp(`^${ORBIT_WORDS.names[id]}`) });
+
+  it('three orbits; the starter flies MAVEN’s; each card’s orbit-change fuel is the engine’s', () => {
+    openLevel(/^Red Planet/, MARS);
+    expect(within(orbitGroup()).getAllByRole('radio')).toHaveLength(3);
+    expect(card('maven').getAttribute('aria-checked')).toBe('true');
+    // the orbit change depends only on the two orbits, not on the packing or the day
+    const cards = orbitCards(buildPackDesign(starterDesign('mars', today()), initialPack(starterDesign('mars', today()), shelfFor('mars'))));
+    for (const c of cards) expect(within(card(c.id)).getByText(ORBIT_WORDS.change(f.speed(c.orbitChange_ms)))).toBeTruthy();
+    expect(within(card('capture')).getByText(ORBIT_WORDS.change(f.speed(0)))).toBeTruthy();
+  });
+
+  it('picking the high orbit flies it, and a reload keeps it', () => {
+    openLevel(/^Red Planet/, MARS);
+    fireEvent.click(card('high'));
+    expect(card('high').getAttribute('aria-checked')).toBe('true');
+    expect(loadLevelPacks().mars?.orbit).toBe('high');
+    cleanup();
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'CHOOSE A MISSION ▸' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Red Planet/ }));
+    pass(100);
+    expect(card('high').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('the Moon keeps LRO’s orbit: no orbit choice there', () => {
+    openLevel(/^First Light/, {});
+    expect(screen.queryByRole('tab', { name: SIDE_TABS.orbit })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: ORBIT_WORDS.label })).toBeNull();
+  });
+});

@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1180" width="1600" height="1180" font-family="'Space Grotesk', 'Segoe UI', Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#00D2FF"/>
+    </marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FF9900"/>
+    </marker>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+    <filter id="glow" x="-10%" y="-30%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#00D2FF" flood-opacity="0.55"/>
+    </filter>
+    <style>
+      .t { fill:#FFFFFF; font-size:16px; font-weight:700; text-anchor:middle; letter-spacing:0.4px; }
+      .s { fill:#A9C1D9; font-size:13px; text-anchor:middle; }
+      .box { fill:#0E2A47; stroke:#00D2FF; stroke-opacity:0.45; stroke-width:1.5; }
+      .hot { fill:#0E2A47; stroke:#00D2FF; stroke-width:2.5; }
+      .dia { fill:#2A1E0A; stroke:#FF9900; stroke-width:2; }
+      .dt { fill:#FFAD00; font-size:14px; font-weight:700; text-anchor:middle; }
+      .ds { fill:#E8C88E; font-size:12px; text-anchor:middle; }
+      .ln { fill:none; stroke:#00D2FF; stroke-width:2; marker-end:url(#a); }
+      .lo { fill:none; stroke:#FF9900; stroke-width:2; marker-end:url(#o); }
+      .lbl { fill:#FF9900; font-size:12px; font-weight:700; letter-spacing:0.8px; }
+      .lc { fill:#00D2FF; font-size:12px; font-weight:700; letter-spacing:0.8px; }
+      .ph { font-family:Orbitron, 'Space Grotesk', 'Segoe UI', Arial, sans-serif; fill:#00D2FF; font-size:17px; font-weight:700; text-anchor:middle; letter-spacing:1.5px; }
+      .panel { fill:#001D3A; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1180" fill="#0B1B2A"/>
+
+  <!-- Title -->
+  <text x="800" y="46" text-anchor="middle" font-family="Orbitron, 'Space Grotesk', 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="800" fill="#FFFFFF" letter-spacing="3">SIGNAL DELAY · HOW THE GAME WORKS</text>
+  <text x="800" y="74" text-anchor="middle" font-size="15" fill="#A9C1D9">Design a mission against real limits, fly it with orders that travel at the speed of light, then bring the science home</text>
+
+  <!-- Panels -->
+  <g filter="url(#sh)">
+    <rect class="panel" x="40" y="140" width="480" height="750" rx="16"/>
+    <rect class="panel" x="560" y="140" width="480" height="750" rx="16"/>
+    <rect class="panel" x="1080" y="140" width="480" height="750" rx="16"/>
+  </g>
+  <text class="ph" x="280" y="174">1 · DESIGN THE MISSION</text>
+  <text class="ph" x="800" y="174">2 · FLY AND SURVIVE</text>
+  <text class="ph" x="1320" y="174">3 · MISSION REPORT</text>
+  <line x1="70" y1="192" x2="490" y2="192" stroke="#00D2FF" stroke-opacity="0.2"/>
+  <line x1="590" y1="192" x2="1010" y2="192" stroke="#00D2FF" stroke-opacity="0.2"/>
+  <line x1="1110" y1="192" x2="1530" y2="192" stroke="#00D2FF" stroke-opacity="0.2"/>
+
+  <!-- ===== Panel 1: Design ===== -->
+  <rect class="box" x="90" y="215" width="380" height="60" rx="10"/>
+  <text class="t" x="280" y="240">CHOOSE A MISSION</text>
+  <text class="s" x="280" y="261">Moon · Mars · Venus · Bennu · Jupiter — solo or team</text>
+
+  <rect class="box" x="90" y="305" width="380" height="60" rx="10"/>
+  <text class="t" x="280" y="330">DEFINE THE OBJECTIVE</text>
+  <text class="s" x="280" y="351">Study the atmosphere · map the surface · visit the moons</text>
+
+  <rect class="box" x="90" y="395" width="380" height="60" rx="10"/>
+  <text class="t" x="280" y="420">CHOOSE THE ROCKET AND THE ORBIT</text>
+  <text class="s" x="280" y="441">More lift costs more · the orbit changes fuel and shadow</text>
+
+  <rect class="box" x="90" y="485" width="380" height="60" rx="10"/>
+  <text class="t" x="280" y="510">PACK THE PARTS</text>
+  <text class="s" x="280" y="531">Instruments, power, radio and fuel in the rocket's nose</text>
+
+  <polygon class="dia" points="280,580 430,635 280,690 130,635"/>
+  <text class="dt" x="280" y="630">WITHIN WEIGHT, BUDGET,</text>
+  <text class="dt" x="280" y="648">POWER AND DATA?</text>
+
+  <rect class="box" x="90" y="720" width="380" height="60" rx="10"/>
+  <text class="t" x="280" y="745">PICK LAUNCH DAY AND LAUNCH</text>
+  <text class="s" x="280" y="766">Calendar from real planet positions (Lambert)</text>
+
+  <line class="ln" x1="280" y1="275" x2="280" y2="303"/>
+  <line class="ln" x1="280" y1="365" x2="280" y2="393"/>
+  <line class="ln" x1="280" y1="455" x2="280" y2="483"/>
+  <line class="ln" x1="280" y1="545" x2="280" y2="578"/>
+  <line class="ln" x1="280" y1="690" x2="280" y2="718"/>
+  <text class="lbl" x="292" y="710">YES</text>
+  <path class="lo" d="M130,635 H65 V515 H88"/>
+  <text class="lbl" x="72" y="628">NO</text>
+
+  <!-- Panel 1 to Panel 2 -->
+  <path class="ln" d="M470,750 H540 V230 H608"/>
+  <text class="lc" x="559" y="500" transform="rotate(-90 559 500)" text-anchor="middle">LIFT-OFF</text>
+
+  <!-- ===== Panel 2: Fly ===== -->
+  <rect class="box" x="610" y="215" width="380" height="60" rx="10"/>
+  <text class="t" x="800" y="240">MISSION CLOCK RUNS</text>
+  <text class="s" x="800" y="261">Day by day, at the real Earth–spacecraft distance</text>
+
+  <polygon class="dia" points="800,290 940,340 800,390 660,340"/>
+  <text class="dt" x="800" y="337">DANGER CARD?</text>
+  <text class="ds" x="800" y="355">solar storm · dust · fault</text>
+
+  <rect class="box" x="610" y="410" width="380" height="60" rx="10"/>
+  <text class="t" x="800" y="435">CHOOSE A RESPONSE</text>
+  <text class="s" x="800" y="456">Or the robot uses its default</text>
+
+  <rect class="hot" x="610" y="500" width="380" height="60" rx="10" filter="url(#glow)"/>
+  <text class="t" x="800" y="525">ORDER CROSSES SPACE AT LIGHT SPEED</text>
+  <text class="s" x="800" y="546" fill="#00D2FF" style="fill:#7FE6FF">t = d / c  ·  3 to 22 minutes to reach Mars</text>
+
+  <rect class="box" x="610" y="590" width="380" height="60" rx="10"/>
+  <text class="t" x="800" y="615">DANGER RESOLVED</text>
+  <text class="s" x="800" y="636">Saved or damaged: an order that arrives late can't help</text>
+
+  <rect class="box" x="610" y="680" width="380" height="60" rx="10"/>
+  <text class="t" x="800" y="705">AT MARS OR THE MOON: OBSERVE</text>
+  <text class="s" x="800" y="726">Each picture costs fuel, battery or risk</text>
+
+  <rect class="box" x="610" y="770" width="380" height="60" rx="10"/>
+  <text class="t" x="800" y="795">PICTURES COME HOME</text>
+  <text class="s" x="800" y="816">On a NASA Deep Space Network pass</text>
+
+  <line class="ln" x1="800" y1="275" x2="800" y2="288"/>
+  <line class="ln" x1="800" y1="390" x2="800" y2="408"/>
+  <text class="lbl" x="812" y="404">YES</text>
+  <line class="ln" x1="800" y1="470" x2="800" y2="498"/>
+  <line class="ln" x1="800" y1="560" x2="800" y2="588"/>
+  <line class="ln" x1="800" y1="650" x2="800" y2="678"/>
+  <line class="ln" x1="800" y1="740" x2="800" y2="768"/>
+  <path class="lo" d="M940,340 H1015 V710 H992"/>
+  <text class="lbl" x="952" y="332">NO</text>
+  <path class="ln" d="M610,800 H585 V260 H608"/>
+  <text class="lc" x="577" y="560" transform="rotate(-90 577 560)" text-anchor="middle">NEXT DAY</text>
+
+  <!-- Panel 2 to Panel 3 -->
+  <line class="ln" x1="990" y1="245" x2="1128" y2="245"/>
+  <text class="lc" x="1060" y="236" text-anchor="middle">MISSION ENDS</text>
+
+  <!-- ===== Panel 3: Report ===== -->
+  <rect class="box" x="1130" y="215" width="380" height="60" rx="10"/>
+  <text class="t" x="1320" y="240">MISSION ALBUM</text>
+  <text class="s" x="1320" y="261">Pictures that made it home · objective met or missed</text>
+
+  <rect class="box" x="1130" y="305" width="380" height="60" rx="10"/>
+  <text class="t" x="1320" y="330">SCORE AND STARS</text>
+  <text class="s" x="1320" y="351">Stars for the science that came home</text>
+
+  <rect class="box" x="1130" y="395" width="380" height="60" rx="10"/>
+  <text class="t" x="1320" y="420">COMPARE WITH THE REAL MISSION</text>
+  <text class="s" x="1320" y="441">Your flight against NASA's MAVEN</text>
+
+  <rect class="box" x="1130" y="485" width="380" height="60" rx="10"/>
+  <text class="t" x="1320" y="510">NEXT TIME: PACK THE …</text>
+  <text class="s" x="1320" y="531">The engine names the part that would have helped</text>
+
+  <polygon class="dia" points="1320,585 1450,635 1320,685 1190,635"/>
+  <text class="dt" x="1320" y="640">FLY AGAIN?</text>
+
+  <rect class="box" x="1130" y="720" width="380" height="60" rx="10"/>
+  <text class="t" x="1320" y="745">RANKS, BADGES, POSTCARDS</text>
+  <text class="s" x="1320" y="766">Next mission unlocks · Daily · Rescue History</text>
+
+  <line class="ln" x1="1320" y1="275" x2="1320" y2="303"/>
+  <line class="ln" x1="1320" y1="365" x2="1320" y2="393"/>
+  <line class="ln" x1="1320" y1="455" x2="1320" y2="483"/>
+  <line class="ln" x1="1320" y1="545" x2="1320" y2="583"/>
+  <line class="ln" x1="1320" y1="685" x2="1320" y2="718"/>
+  <text class="lbl" x="1332" y="708">NO</text>
+
+  <!-- Fly again loop back to Pack -->
+  <path class="lo" d="M1450,635 H1545 V112 H495 V515 H472"/>
+  <text class="lbl" x="1462" y="627">YES</text>
+  <rect x="750" y="102" width="500" height="20" fill="#0B1B2A"/>
+  <text class="lbl" x="1000" y="117" text-anchor="middle">FLY AGAIN · CHANGE ONE THING, SEE EACH LIMIT AGAINST LAST TIME</text>
+
+  <!-- ===== Under the hood ===== -->
+  <text class="ph" x="800" y="935">UNDER THE HOOD</text>
+  <g filter="url(#sh)">
+    <rect class="panel" x="40" y="960" width="320" height="120" rx="12"/>
+    <rect class="panel" x="440" y="960" width="320" height="120" rx="12"/>
+    <rect class="panel" x="840" y="960" width="320" height="120" rx="12"/>
+    <rect class="panel" x="1240" y="960" width="320" height="120" rx="12"/>
+  </g>
+  <text class="t" x="200" y="995">NASA DATA, EVERY VALUE SOURCED</text>
+  <text class="s" x="200" y="1020">JPL ephemeris · NSSDC fact sheets · DSN</text>
+  <text class="s" x="200" y="1040">MAVEN · LRO · OSIRIS-REx · NASA images</text>
+  <text class="s" x="200" y="1060" style="fill:#FFAD00">Guesses labelled "game estimate"</text>
+
+  <text class="t" x="600" y="995">DESIGN ENGINE</text>
+  <text class="s" x="600" y="1020">Lambert transfer · rocket equation</text>
+  <text class="s" x="600" y="1040">launch energy (C3) · power and eclipses</text>
+  <text class="s" x="600" y="1060">radio link budget · mass · cost</text>
+
+  <text class="t" x="1000" y="995">OPERATIONS ENGINE</text>
+  <text class="s" x="1000" y="1020">Seeded hazards · light delay t = d / c</text>
+  <text class="s" x="1000" y="1040">DSN passes · solar conjunctions</text>
+  <text class="s" x="1000" y="1060">real storms from NASA DONKI (Daily)</text>
+
+  <text class="t" x="1400" y="995">THE GAME SCREENS</text>
+  <text class="s" x="1400" y="1020">Show the engine's numbers, never compute</text>
+  <text class="s" x="1400" y="1040">ⓘ opens each value's source and link</text>
+  <text class="s" x="1400" y="1060">English and French · phone and desktop</text>
+
+  <line class="ln" x1="360" y1="1020" x2="438" y2="1020"/>
+  <line class="ln" x1="760" y1="1020" x2="838" y2="1020"/>
+  <line class="ln" x1="1160" y1="1020" x2="1238" y2="1020"/>
+
+  <text x="800" y="1125" text-anchor="middle" font-size="14" fill="#FFFFFF">Real missions (MAVEN, OSIRIS-REx) fly through the same model as the player and must reproduce their published numbers.</text>
+  <text x="800" y="1150" text-anchor="middle" font-size="13" fill="#A9C1D9">A flight is a function of the design, a seed and the list of orders, so any mission can be replayed exactly.</text>
+</svg>

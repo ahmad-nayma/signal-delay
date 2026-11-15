@@ -1,0 +1,496 @@
+// MISSION REPORT (Signal Delay design, screen 03). First the robot's FINAL TRANSMISSION comes off the teletype; then
+// the paper feeds up and prints your mission as a 4-panel comic. Then: stars,
+// what saved you, what hurt you, how the real NASA mission did, and a real lesson from the flight. Engineer mode adds
+// the score breakdown, every comparison row with its ⓘ, the star rules and the Mission operations risk.
+// Every number comes from the engine (operationsDebrief, ops/report.ts, compare.ts); this screen lays them out.
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DESTINATIONS, HAZARDS, LAUNCH_VEHICLES, RIDESHARES } from '../../engine/data';
+import { heardMessages, missionAlbum, operationsDebrief, VOICE_RULES, type OpsState } from '../../engine/ops/index';
+import { finalTransmission, packHint, reportCompare, reportPanels, reportVerdict } from '../../engine/ops/report';
+import type { PartId } from '../../engine/pack';
+import { objectiveResult } from '../../engine/ops/observe';
+import { MAX_SCORE, MARGIN_BAND, scoreGrade, STAR_RULES } from '../../engine/scoring';
+import type { CompareMetric } from '../../engine/compare';
+import type { Design } from '../../engine/types';
+import { ComicArt } from '../components/report/ComicArt';
+import { FinalTransmission } from '../components/report/FinalTransmission';
+import { MissionAlbum } from '../components/report/MissionAlbum';
+import { TeamDebrief } from '../components/team/TeamDebrief';
+import type { TeamAction } from '../../engine/team/log';
+import type { TeamState } from '../../engine/team/reduce';
+import { teamReport } from '../../engine/team/report';
+import { PostcardView, postcardSrc } from '../components/sd/PostcardView';
+import { POSTCARDS, postcardsEarned } from '../../engine/postcards';
+import type { RankDef } from '../../engine/ranks';
+import { SourceInfo } from '../components/SourceInfo';
+import { MissionSteps } from '../components/sd/MissionSteps';
+import { BackButton } from '../components/sd/BackButton';
+import { ModeLever, type Mode } from '../components/sd/ModeLever';
+import { LangToggle } from '../components/sd/LangToggle';
+import { SDIcon } from '../components/sd/SDIcon';
+import { useReducedMotion } from '../opsGeometry';
+import { useOpsRisk } from '../riskRunner';
+import { useIsPhone } from '../sdGeometry';
+import { BADGE_WORDS, BRAND_WORDS, LAST_WORDS, OBJECTIVE_PICK_WORDS, OBJECTIVE_WORDS, PART_LOOK, dayCount, fullDate, CATEGORY_NAME, CREW_WORDS, dangerLook, finalLines, FLY_WORDS, GAME_NAME, hurtWords, optionShort, PANEL_SOUND, panelWords, POSTCARD_WORDS, RANK_WORDS, REPORT_STAMP, REPORT_WORDS, ROBOT_WORDS, robotNameOr, robotSays, savedWords, STAR_WORDS } from '../sdWords';
+import * as f from '../format';
+import { voiceContext } from '../voiceContext';
+import { said } from '../cited';
+
+/** The comic prints one panel every 2.4 s, its caption at 38 characters a second (as the design). */
+export const PANEL_STEP_MS = 2400;
+const CAPTION_CPS = 38;
+const TICK_MS = 40;
+
+const metricName = (m: CompareMetric) => (REPORT_WORDS.metric as Record<CompareMetric, string>)[m];
+const metricValue = (m: CompareMetric, v: number) => (m === 'powerAtArrival' ? f.watts(v) : m === 'deltaVCapability' ? f.speed(v) : f.kg(v));
+const DEST_COLOR: Record<Design['destination'], string> = { moon: '#cfcabb', venus: '#e8c27a', mars: 'var(--sd-mars)', bennu: '#8f8676', jupiter: '#d9a066' };
+
+interface Props {
+  state: OpsState;
+  design: Design;
+  mode: Mode;
+  onMode: (m: Mode) => void;
+  missionName: string;
+  /** Next level, when this flight opened it (Cadet). */
+  next?: { title: string; onPlay: () => void };
+  onFlyAgain: () => void;
+  onHome: () => void;
+  /** ◂ BACK to the screen before the flight. */
+  onBack?: () => void;
+  homeLabel: string;
+  /** The robot's name (Pack); the default when empty. */
+  robotName?: string;
+  /** What this flight earned in the crew file: a new rank, new badges. */
+  promotion?: { rank?: RankDef; badges: string[] };
+  /** A team's flight: the TEAM DEBRIEF comes after the album, before FINAL TRANSMISSION (spec UI rule 52). */
+  team?: { state: TeamState; log: readonly TeamAction[] };
+  /** The level's shelf (solo Cadet): "what hurt you" names a part from it that would have helped (spec UI rule 60). */
+  shelf?: PartId[];
+}
+
+export function MissionReport({ state, design, mode, onMode, missionName, next, onFlyAgain, onHome, onBack, homeLabel, robotName, promotion, team, shelf }: Props) {
+  const engineer = mode === 'engineer';
+  const phone = useIsPhone();
+  const still = useReducedMotion();
+  const dest = DESTINATIONS[design.destination];
+  const ev = state.env.ev;
+  const d = useMemo(() => operationsDebrief(state), [state]);
+  const panels = useMemo(() => reportPanels(state), [state]);
+  const verdict = useMemo(() => reportVerdict(state), [state]);
+  const hint = useMemo(() => (shelf ? packHint(state, shelf) : undefined), [state, shelf]);
+  const compare = useMemo(() => reportCompare(design, ev), [design, ev]);
+  const risk = useOpsRisk(design);
+  const ft = useMemo(() => finalTransmission(state), [state]);
+  // At Mars the album comes first (spec: UI rule 43); FEED THE PAPER brings the final transmission (desktop).
+  const album = useMemo(() => missionAlbum(state), [state]);
+  // A solo flight's objective (spec UI rule 56): met or missed, from the engine. A team's is in its debrief.
+  const objective = useMemo(() => (team ? undefined : objectiveResult(state)), [team, state]);
+  const objectiveLine = objective && {
+    met: objective.met,
+    text: !objective.matched
+      ? OBJECTIVE_PICK_WORDS.result.noPart(OBJECTIVE_WORDS.objectives[objective.objective].title)
+      : (objective.met ? OBJECTIVE_PICK_WORDS.result.met : OBJECTIVE_PICK_WORDS.result.missed)(OBJECTIVE_WORDS.objectives[objective.objective].title, f.pct(objective.favouredHome, 0)),
+  };
+  const [albumFed, setAlbumFed] = useState(!album || phone);
+  // A team's debrief comes next (desktop: its NEXT brings the final transmission; a phone shows both in turn).
+  const tr = useMemo(() => (team ? teamReport(team.log, { team: team.state, ops: state }) : undefined), [team?.state, team?.log, state]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [teamFed, setTeamFed] = useState(!tr || phone);
+  const finalTop = useRef<HTMLDivElement>(null);
+  const teamTop = useRef<HTMLDivElement>(null);
+  const scrollTo = (el: HTMLElement | null) => el?.scrollIntoView?.({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  useEffect(() => {
+    if (albumFed && album && !phone) scrollTo(tr ? teamTop.current : finalTop.current);
+  }, [albumFed]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (teamFed && tr && !phone) scrollTo(finalTop.current);
+  }, [teamFed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [t, setT] = useState(0);
+  /** The comic prints once the final transmission has (or the paper is fed by hand). */
+  const [printing, setPrinting] = useState(!ft);
+  const reportTop = useRef<HTMLDivElement>(null);
+  const feed = () => {
+    setPrinting(true);
+    reportTop.current?.scrollIntoView?.({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  };
+
+  useEffect(() => {
+    if (still || !printing || t > PANEL_STEP_MS * panels.length + 2000) return;
+    const id = setTimeout(() => setT((x) => x + TICK_MS), TICK_MS);
+    return () => clearTimeout(id);
+  }, [t, still, printing, panels.length]);
+
+  const type = (h: string) => HAZARDS[h]?.title ?? h;
+  const label = (h: string, o: string) => optionShort(h, o, HAZARDS[h]?.options.find((x) => x.id === o)?.label ?? o);
+  const rocket = design.rideshareId ? RIDESHARES[design.rideshareId]?.name ?? design.launchVehicleId : LAUNCH_VEHICLES[design.launchVehicleId]?.name ?? design.launchVehicleId;
+  const ctx = { dest: dest.name, rocket, label, title: type, autopilot: !!design.kit?.autopilot, sent_Gbit: d.downlinked_Gbit };
+  const stampKey = state.status === 'lost' ? 'lost' : state.status === 'not-launched' ? 'not-launched' : ft?.ending === 'extended' ? 'extended' : 'complete';
+  const stamp = REPORT_STAMP[stampKey];
+  const saved = savedWords(verdict.saved, { label, title: type });
+  const hurt = hurtWords(verdict.hurt, { label, title: type });
+  const starWords = STAR_WORDS(dest.name);
+  const starRule = [
+    'first science home',
+    `science ≥ ${f.num(STAR_RULES.scienceForSecondStar.value)}`,
+    `science ≥ ${f.num(STAR_RULES.scienceForThirdStar.value)}`,
+  ];
+  const lessonHazard = verdict.hurt.code === 'bad-outcome' ? verdict.hurt.hazardType : 'hazardType' in verdict.saved ? verdict.saved.hazardType : panels.find((p) => p.hazardType)?.hazardType;
+  const lesson = lessonHazard ? HAZARDS[lessonHazard]?.realHistory : undefined;
+
+  const panelEls = panels.map((p, i) => {
+    const lt = still ? Infinity : t - i * PANEL_STEP_MS;
+    const on = lt > 0;
+    const w = panelWords(p, ctx);
+    const text = on ? w.text.slice(0, Math.floor((lt / 1000) * CAPTION_CPS)) : '';
+    const eng =
+      p.kind === 'launch'
+        ? `${f.isoDate(ev.details.launchDate)} · C3 ${f.c3(ev.trajectory.c3)}`
+        : p.kind === 'arrival' && p.dv_ms !== undefined
+          ? `Δv ${f.speed(p.dv_ms)}`
+          : p.kind === 'conjunction'
+            ? `SEP < 2° · ${f.days(p.blackoutDays ?? 0)}`
+            : p.kind === 'hazard'
+              ? `${p.by ?? ''} · ${p.bad ? 'failed' : 'ok'}`
+              : p.kind === 'complete'
+                ? `${f.gbit(d.downlinked_Gbit)} of ${f.gbit(d.goal_Gbit)}`
+                : '';
+    return (
+      <figure key={i} className={`rp-panel${on ? ' on' : ''}`} aria-label={`${w.head}: ${w.text}`}>
+        <ComicArt kind={p.kind} {...(p.hazardType && PANEL_SOUND[p.hazardType] ? { sound: PANEL_SOUND[p.hazardType] } : {})} destColor={DEST_COLOR[design.destination]} />
+        <div className="rp-halftone" />
+        <figcaption className="rp-caption">
+          <span className="rp-cap-head">{w.head}</span>
+          <span className="rp-cap-text">{text}</span>
+        </figcaption>
+        {engineer && eng && <span className="rp-panel-eng">{eng}</span>}
+      </figure>
+    );
+  });
+
+  const starsEl = (
+    <div className="rp-stars" aria-label={REPORT_WORDS.stars(f.num(d.stars))}>
+      {starWords.map((s, i) => (
+        <div key={s} className="rp-star">
+          <SDIcon icon="star" size={phone ? 34 : 44} color={i < d.stars ? 'var(--sd-gold)' : 'var(--sd-ink-3)'} fill={i < d.stars} sw={1.6} />
+          <span className="rp-star-word">{s}</span>
+          {engineer && !phone && <span className="rp-star-rule">{starRule[i]}</span>}
+        </div>
+      ))}
+    </div>
+  );
+
+  const stampEl = (
+    <div className="rp-stamp" style={{ color: stamp.color, borderColor: stamp.color }}>
+      {stamp.word[0]}
+      <br />
+      {stamp.word[1]}
+    </div>
+  );
+
+  const verdictEl = (
+    <div className="rp-verdicts">
+      <div className="rp-verdict">
+        <span className="rp-verdict-icon ok">
+          <SDIcon icon={verdict.saved.code === 'part' || verdict.saved.code === 'autopilot' ? 'shield' : 'check'} size={24} color="var(--sd-paper)" />
+        </span>
+        <div>
+          <span className="rp-verdict-k ok">{REPORT_WORDS.saved}</span>
+          <span className="rp-verdict-v">
+            <b>{saved.strong}</b>
+            {saved.rest}
+          </span>
+        </div>
+      </div>
+      <div className="rp-verdict">
+        <span className="rp-verdict-icon bad">
+          <SDIcon icon="storm" size={24} color="var(--sd-paper)" />
+        </span>
+        <div>
+          <span className="rp-verdict-k bad">{REPORT_WORDS.hurt}</span>
+          <span className="rp-verdict-v">
+            <b>{hurt.strong}</b>
+            {hurt.rest}
+          </span>
+          {hint && <span className="rp-verdict-hint">{LAST_WORDS.nextTime(PART_LOOK[hint.part].name)}</span>}
+        </div>
+      </div>
+    </div>
+  );
+
+  const rows = compare
+    ? [
+        { k: REPORT_WORDS.launch, you: fullDate(compare.launch.you).toUpperCase(), them: fullDate(compare.launch.them.value).toUpperCase(), s: compare.launch.them as unknown as Parameters<typeof SourceInfo>[0]['s'], gap: false },
+        ...(compare.scienceDays.them
+          ? [{ k: REPORT_WORDS.plannedScience, you: dayCount(compare.scienceDays.you).toUpperCase(), them: dayCount(compare.scienceDays.them!.value).toUpperCase(), s: compare.scienceDays.them!, gap: false }]
+          : []),
+        ...compare.rows
+          .filter((r) => engineer || r.metric === 'wetMass' || r.metric === 'powerAtArrival')
+          .map((r) => ({ k: metricName(r.metric), you: metricValue(r.metric, r.you), them: metricValue(r.metric, r.them), s: r.themSource, gap: r.metric === compare.biggestGap })),
+      ]
+    : [];
+
+  const compareEl = compare && (
+    <div className="rp-compare">
+      <div className="rp-compare-head">
+        <span className="rp-compare-title">{REPORT_WORDS.youVs}</span>
+        <span className="rp-compare-label">{compare.label.toUpperCase()}</span>
+      </div>
+      <div className="rp-compare-grid" role="table" aria-label={REPORT_WORDS.youVsLabel}>
+        <span role="columnheader" />
+        <span role="columnheader" className="you">
+          {REPORT_WORDS.you}
+        </span>
+        <span role="columnheader" className="them">
+          {compare.missionId === 'maven' ? 'MAVEN' : 'OSIRIS-REX'}
+        </span>
+        {rows.map((r) => (
+          <div key={r.k} role="row" className={`rp-row${r.gap && engineer ? ' gap' : ''}`}>
+            <span role="rowheader" className="k">
+              {r.k}
+            </span>
+            <span role="cell" className="you">
+              {r.you}
+            </span>
+            <span role="cell" className="them">
+              {r.them}
+              {engineer && <SourceInfo s={r.s} title={`${compare.label} ${r.k.toLowerCase()}`} />}
+            </span>
+          </div>
+        ))}
+      </div>
+      {engineer && <span className="rp-compare-src">BIGGEST GAP · {metricName(compare.biggestGap)} · HISTORY · {compare.history}</span>}
+    </div>
+  );
+
+  const lessonEl = (
+    <div className="rp-card-col">
+      {lesson && (
+        <div className="rp-card">
+          <span className="rp-card-tag">{REPORT_WORDS.realLesson}</span>
+          <span className="rp-card-k">
+            {REPORT_WORDS.fromFlight}
+            {lesson.isGameEstimate && <span className="sd-verify">{REPORT_WORDS.toVerify}</span>}
+            <SourceInfo s={lesson} title={REPORT_WORDS.lessonTitle} />
+          </span>
+          <span className="rp-card-title">{lessonHazard ? dangerLook(lessonHazard, HAZARDS[lessonHazard]?.title ?? '').title : ''}</span>
+          <span className="rp-card-v">{said(lesson.value)}</span>
+        </div>
+      )}
+      <div className="rp-actions">
+        {next ? (
+          <button type="button" className="rp-btn outline" onClick={next.onPlay}>
+            {REPORT_WORDS.next(next.title)}
+          </button>
+        ) : (
+          <button type="button" className="rp-btn outline" onClick={onHome}>
+            {homeLabel}
+          </button>
+        )}
+        <button type="button" className="rp-btn red" onClick={onFlyAgain}>
+          {REPORT_WORDS.flyAgain}
+        </button>
+      </div>
+      <button type="button" className="rp-link" onClick={onHome}>
+        {homeLabel}
+      </button>
+    </div>
+  );
+
+  const name = robotNameOr(robotName);
+  // The final transmission holds the robot's last words; only a robot that never flew has just its pad message here.
+  const last = ft ? undefined : heardMessages(state).latest;
+  const albumEl = album && <MissionAlbum album={album} name={name.toUpperCase()} phone={phone} {...(objectiveLine ? { objective: objectiveLine } : {})} onFeed={() => setAlbumFed(true)} />;
+  const teamEl = tr && team && albumFed && (
+    <TeamDebrief
+      report={tr}
+      state={team.state}
+      phone={phone}
+      onNext={() => (phone ? scrollTo(finalTop.current) : setTeamFed(true))}
+      {...(onBack && !phone && !album ? { back: <BackButton onBack={onBack} className="rp-back" /> } : {})}
+    />
+  );
+  const finalEl = ft && albumFed && teamFed && (
+    <FinalTransmission
+      ft={ft}
+      lines={finalLines(ft, { dest: dest.name, name, title: type, label })}
+      name={name}
+      phone={phone}
+      {...(onBack && !phone && !album && !tr ? { back: <BackButton onBack={onBack} className="rp-back ft-back" /> } : {})}
+      onPrinted={() => setPrinting(true)}
+      onFeed={feed}
+    />
+  );
+  const lastEl = last && (
+    <div className={`rp-radio${last.kind === 'last-words' || last.kind === 'launch-failed' ? ' bad' : ''}`} role="note" aria-label={ROBOT_WORDS.lastMessage(name)}>
+      <span className="rp-radio-k">
+        📡 {ROBOT_WORDS.lastMessage(name)}
+        {last.kind === 'last-words' && <SourceInfo s={VOICE_RULES.lastWordsHistory} title={REPORT_WORDS.lastWords} />}
+      </span>
+      <span className="rp-radio-v">“{robotSays(last, voiceContext(dest.name, robotName))}”</span>
+      <span className="rp-radio-t">{ROBOT_WORDS.took(dest.name.toUpperCase(), FLY_WORDS.duration(last.delay_s))}</span>
+    </div>
+  );
+
+  const promoted = !!promotion && (promotion.rank !== undefined || promotion.badges.length > 0);
+  const promoEl = promoted && (
+    <section className="rp-promo" aria-label={CREW_WORDS.title}>
+      {promotion!.rank && (
+        <div className="rp-promo-item rank">
+          <SDIcon icon="medal" size={30} color="var(--sd-gold)" />
+          <span>
+            <span className="rp-promo-k">{CREW_WORDS.promoted}</span>
+            <span className="rp-promo-v">{RANK_WORDS[promotion!.rank.id] ?? promotion!.rank.id}</span>
+          </span>
+        </div>
+      )}
+      {promotion!.badges.map((id) => (
+        <div key={id} className="rp-promo-item">
+          <SDIcon icon="medal" size={26} color="var(--sd-crt-hi)" />
+          <span>
+            <span className="rp-promo-k">{CREW_WORDS.newBadge}</span>
+            <span className="rp-promo-v">{BADGE_WORDS[id]?.name ?? id}</span>
+          </span>
+        </div>
+      ))}
+    </section>
+  );
+
+  const won = useMemo(() => postcardsEarned(state).map((id) => POSTCARDS.find((c) => c.id === id)!), [state]);
+  const [card, setCard] = useState<string>();
+  const openCard = won.find((c) => c.id === card);
+  const cardsEl = state.status !== 'not-launched' && (
+    <section className="rp-postcards" aria-label={POSTCARD_WORDS.report}>
+      <span className="rp-postcards-k">📮 {POSTCARD_WORDS.report}</span>
+      {won.length ? (
+        <div className="rp-postcards-row">
+          {won.map((c) => (
+            <button key={c.id} type="button" className="rp-postcard" onClick={() => setCard(c.id)} aria-label={said(c.title)}>
+              <img src={postcardSrc(c)} alt="" />
+              <span>{said(c.title)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <span className="rp-postcards-none">{POSTCARD_WORDS.none}</span>
+      )}
+      {openCard && <PostcardView card={openCard} onClose={() => setCard(undefined)} />}
+    </section>
+  );
+
+  const engineerEl = engineer && (
+    <section className="rp-eng" aria-label="Engineer details">
+      <div className="rp-eng-col">
+        <span className="rp-eng-title">
+          SCORE · {f.num(d.score)} / {f.num(MAX_SCORE)} · Σ wᵢ sᵢ
+        </span>
+        <div className="rp-score" role="table" aria-label="Score breakdown">
+          {d.breakdown.map((b) => (
+            <div key={b.category} role="row" className={`rp-score-row${b.category === d.hintCategory ? ' hint' : ''}`}>
+              <span role="rowheader">{CATEGORY_NAME[b.category]}</span>
+              <span role="cell">{f.num(b.score)}</span>
+              <span role="cell">× {f.num(b.weight, 2)}</span>
+              <span role="cell">= {f.num(b.contribution, 1)}</span>
+              <span role="cell" className={`grade ${scoreGrade(b.score)}`}>
+                {scoreGrade(b.score).toUpperCase()}
+              </span>
+            </div>
+          ))}
+        </div>
+        <span className="rp-hint">{REPORT_WORDS.nextStar(d.hint)}</span>
+      </div>
+      <div className="rp-eng-col">
+        <span className="rp-eng-title">MISSION RISK · OPS MONTE CARLO</span>
+        <span className="rp-risk">
+          {risk.status !== 'error' && risk.estimate
+            ? `${f.pct(risk.estimate.meter.used, 1)} ± ${f.pct(risk.estimate.stdErr, 1)} · ${f.num(risk.estimate.tally.runs)} runs · seed ${String(risk.estimate.seed)}`
+            : risk.status === 'error'
+              ? risk.error
+              : 'Simulating…'}
+        </span>
+        <span className="rp-eng-title">FLIGHT</span>
+        <span className="rp-risk">
+          {`${f.num(d.scienceDaysAchieved)} of ${f.num(d.plannedScienceDays)} science days · ${f.gbit(d.downlinked_Gbit)} of ${f.gbit(d.goal_Gbit)} · Δv left ${f.speed(d.deltaV.left_ms)}`}
+        </span>
+        <span className="rp-risk">{`Seed ${String(state.seed ?? 0)} · extension: ${d.extension.outcome}`}</span>
+      </div>
+    </section>
+  );
+
+  if (phone)
+    return (
+      <div className={`sd rp phone${engineer ? ' eng' : ''}`}>
+        <div className="rp-sheet">
+          {onBack && <BackButton onBack={onBack} className="rp-back" />}
+          {albumEl}
+          {teamEl}
+          <div ref={finalTop}>{finalEl}</div>
+          <div className="rp-phone-head" ref={reportTop}>
+            <div>
+              <span className="rp-kicker">{REPORT_WORDS.kickerPhone(missionName, f.num(panels.at(-1)!.day))}</span>
+              <h1 className="rp-title">
+                {REPORT_WORDS.titleLines[0]}
+                <br />
+                {REPORT_WORDS.titleLines[1]}
+              </h1>
+            </div>
+            {stampEl}
+          </div>
+          <span className="sd-top-keys">
+            <LangToggle />
+            <ModeLever mode={mode} onMode={onMode} />
+          </span>
+          {starsEl}
+          <div className="rp-strip">{panelEls}</div>
+          {promoEl}
+          {lastEl}
+          {cardsEl}
+          {verdictEl}
+          {compareEl}
+          {lessonEl}
+          {engineerEl}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className={`sd rp${engineer ? ' eng' : ''}`}>
+      <div className="rp-sheet">
+        <div className="rp-holes left" />
+        <div className="rp-holes right" />
+        {album && onBack && <BackButton onBack={onBack} className="rp-back ft-back" />}
+        {albumEl}
+        <div ref={teamTop}>{teamEl}</div>
+        <div ref={finalTop}>{finalEl}</div>
+        <header className="rp-head" ref={reportTop as React.RefObject<HTMLElement | null>}>
+          <div className="rp-head-l">
+            {/* One Back: the album's when there is one (a lost robot has an album but no final transmission). */}
+            {onBack && !ft && !album && !tr && <BackButton onBack={onBack} className="rp-back" />}
+            <span className="rp-kicker">{REPORT_WORDS.kicker(missionName, dest.name, f.dayPad(panels.at(-1)!.day))}</span>
+            <h1 className="rp-title">{REPORT_WORDS.title}</h1>
+          </div>
+          {starsEl}
+          {stampEl}
+        </header>
+        <div className="rp-comic">{panelEls}</div>
+        {promoEl}
+        {lastEl}
+        {cardsEl}
+        <div className="rp-lower">
+          {verdictEl}
+          {compareEl ?? <div className="rp-compare empty">{REPORT_WORDS.noCompare}</div>}
+          {lessonEl}
+        </div>
+        {engineerEl}
+        <div className="rp-nav">
+          <button type="button" className="rp-brand" onClick={onHome} aria-label={BRAND_WORDS.home}>
+            {GAME_NAME}
+          </button>
+          <MissionSteps at={2} first={engineer ? 'BUILD' : 'PACK'} />
+          <span className="sd-top-keys">
+            <LangToggle />
+            <ModeLever mode={mode} onMode={onMode} />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

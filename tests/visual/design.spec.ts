@@ -1,0 +1,148 @@
+// Reference shots of the Claude Design mockups (docs/design/signal-delay), one per screen state, at the
+// same sizes as the game shots. Run with `npm run shots -- design`.
+import { expect, test, type Page } from '@playwright/test';
+
+const DIR = '/docs/design/signal-delay/';
+const OUT = 'docs/design/signal-delay/shots/';
+
+async function open(page: Page, file: string) {
+  await page.setViewportSize({ width: 1700, height: 1100 });
+  await page.goto(DIR + encodeURIComponent(file));
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(1500);
+}
+
+/** The device frame inside a labelled design artboard (`<div id="1a">` → label row + frame). */
+const frame = (page: Page, id: string) => page.locator(`[id="${id}"] > div:nth-child(2)`);
+
+async function shoot(page: Page, id: string, name: string, project: string) {
+  const f = frame(page, id);
+  await expect(f).toBeVisible();
+  await f.screenshot({ path: `${OUT}${name}-${project}.png`, animations: 'allow' });
+}
+
+const SCREENS: { file: string; name: string; desk: string; phone: string; jumps?: string[] }[] = [
+  { file: 'Signal Delay - Fly and Survive.dc.html', name: 'fly', desk: '1a', phone: '1b', jumps: ['CRUISE', 'DANGER CARD', 'ORDER IN FLIGHT', 'ROBOT REPLIES', 'RESULT', 'SCIENCE TARGETS', 'DOWNLINK'] },
+  { file: 'Signal Delay - Pack.dc.html', name: 'pack', desk: '2a', phone: '2b' },
+  { file: 'Signal Delay - Home.dc.html', name: 'home', desk: '4a', phone: '4b' },
+  { file: 'Signal Delay - Home.dc.html', name: 'daily', desk: '5a', phone: '5b' },
+  { file: 'Signal Delay - Notebook.dc.html', name: 'notebook', desk: '6a', phone: '6b' },
+  // Team Mode (spec: Team mode): setup, the objective vote, and the team parts of Pack, Fly and the report. The online
+  // room (T6, T7) has its own test below.
+  { file: 'Signal Delay - Team Setup.dc.html', name: 'team-setup', desk: 't1a', phone: 't1b' },
+  { file: 'Signal Delay - Team Setup.dc.html', name: 'team-objective', desk: 't2a', phone: 't2b' },
+  { file: 'Signal Delay - Team Play.dc.html', name: 'team-pack', desk: 't3a', phone: 't3b' },
+  { file: 'Signal Delay - Team Play.dc.html', name: 'team-fly', desk: 't4a', phone: 't4b' },
+  { file: 'Signal Delay - Team Play.dc.html', name: 'team-report', desk: 't5a', phone: 't5b' },
+];
+
+/** Fly jump buttons → shot names (kept the same as the game shots in fly.spec.ts). */
+const JUMP_SHOT: Record<string, string> = { 'ORDER IN FLIGHT': 'signal-in-flight', 'ROBOT REPLIES': 'robot-replies', RESULT: 'result-arrives' };
+
+for (const s of SCREENS) {
+  test(`design ${s.name}`, async ({ page }, info) => {
+    await open(page, s.file);
+    const id = info.project.name === 'mobile' ? s.phone : s.desk;
+    if (!s.jumps) {
+      await shoot(page, id, s.name, info.project.name);
+      return;
+    }
+    for (const j of s.jumps) {
+      await page.getByRole('button', { name: j, exact: true }).click();
+      await page.waitForTimeout(j === 'RESULT' ? 4000 : j === 'DOWNLINK' ? 9000 : 1200); // the downlink waits for the pass, then prints
+      await shoot(page, id, `${s.name}-${JUMP_SHOT[j] ?? j.toLowerCase().replace(/\s+/g, '-')}`, info.project.name);
+    }
+  });
+}
+
+// The Online Room (T6, T7; spec: Online room). Desktop: the host lobby once the four joins have played, then the
+// host's three room states. Phone: the join screen, the four role controllers and the four phone room states.
+test('design online room', async ({ page }, info) => {
+  await open(page, 'Signal Delay - Online Room.dc.html');
+  const project = info.project.name;
+  await page.waitForTimeout(8500); // the joins arrive one after another, the last at about 8 s
+  if (project !== 'mobile') {
+    await shoot(page, 't6a', 'team-online', project);
+    for (const [tab, name] of [
+      ['PLAYER RECONNECTING', 'online-reconnecting'],
+      ['HOST RETURNS · RESUME', 'online-resume'],
+      ['RELAY OFFLINE', 'online-offline'],
+    ] as const) {
+      await page.getByRole('button', { name: tab, exact: true }).click();
+      await page.waitForTimeout(tab === 'HOST RETURNS · RESUME' ? 9000 : 1200); // the phones rejoin one by one
+      await shoot(page, 't7a', name, project);
+    }
+    return;
+  }
+  for (const [id, name] of [
+    ['t6b', 'team-online'],
+    ['t6c', 'online-fd'],
+    ['t6d', 'online-eng'],
+    ['t6e', 'online-sci'],
+    ['t6f', 'online-com'],
+    ['t7b', 'online-waiting'],
+    ['t7c', 'online-reconnecting'],
+    ['t7d', 'online-host-left'],
+    ['t7e', 'online-offline'],
+  ] as const) {
+    await shoot(page, id, name, project);
+  }
+});
+
+// Name Your Robot (screen 00): the typed intro, then a suggestion launched and its first words.
+test('design name', async ({ page }, info) => {
+  await open(page, 'Signal Delay - Name Your Robot.dc.html');
+  const id = info.project.name === 'mobile' ? '0b' : '0a';
+  await page.waitForTimeout(1500);
+  await shoot(page, id, 'name', info.project.name);
+  const f = frame(page, id);
+  await f.getByRole('button', { name: /VOYA/ }).click();
+  await f.getByRole('button', { name: /LAUNCH INTO TODAY/ }).click();
+  await page.waitForTimeout(2500);
+  await shoot(page, id, 'name-launched', info.project.name);
+});
+
+// Mission Report (screen 03): the MISSION ALBUM for each ending, then the FINAL TRANSMISSION teletype under it,
+// then the report.
+test('design report', async ({ page }, info) => {
+  await open(page, 'Signal Delay - Mission Report.dc.html');
+  const mobile = info.project.name === 'mobile';
+  const id = mobile ? '3b' : '3a';
+  /** The phone frame scrolls: put its nth section (0 album, 1 transmission, 2 report) at the top. */
+  const scrollPhone = (n: number) =>
+    frame(page, id)
+      .locator(':scope > div')
+      .evaluate((el, k) => {
+        const kid = el.children[k];
+        el.scrollTop = kid ? kid.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop : 0;
+      }, n);
+  for (const ending of ['LOST', 'EXTENDED', 'COMPLETE']) {
+    const suffix = ending === 'COMPLETE' ? '' : `-${ending.toLowerCase()}`;
+    await page.getByRole('button', { name: ending, exact: true }).click();
+    if (mobile) await scrollPhone(0);
+    await page.waitForTimeout(2000);
+    await shoot(page, id, `report-album${suffix}`, info.project.name);
+    if (mobile) await scrollPhone(1);
+    else await page.getByRole('button', { name: /FEED THE PAPER · FINAL TRANSMISSION/ }).click();
+    await page.waitForTimeout(11_000); // the lines type one after another
+    await shoot(page, id, `report-final${suffix}`, info.project.name);
+  }
+  if (mobile) await scrollPhone(2);
+  else await page.getByRole('button', { name: /FEED THE PAPER · MISSION REPORT/ }).click();
+  await page.waitForTimeout(12_000); // the comic prints panel by panel
+  await shoot(page, id, 'report', info.project.name);
+});
+
+// The Moon Globe mockup (docs/design/3d, spec UI rules 45–46): its three levels at the game's sizes. It loads
+// three.js from unpkg, so it needs the network.
+test.describe('design moon globe', () => {
+  for (const level of [1, 2, 3]) {
+    test(`design moon globe ${level}`, async ({ page }, info) => {
+      await page.goto(`/docs/design/3d/${encodeURIComponent('Moon Globe.html')}?level=${level}`);
+      await page.locator('three-d-stage canvas').first().waitFor({ timeout: 60_000 });
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: `docs/design/3d/shots/moon-${level}-${info.project.name}.png` });
+    });
+  }
+});

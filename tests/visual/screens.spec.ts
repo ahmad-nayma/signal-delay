@@ -1,0 +1,58 @@
+// Game shots of HOME, the DAILY share card and the NOTEBOOK. Run: npm run shots -- screens
+import { expect, test } from '@playwright/test';
+import { flyToEnd, routeDonki } from './helpers';
+
+const seedStorage = (extra: Record<string, string> = {}) => {
+  const items = { 'mdt.mode': 'cadet', 'mdt.progress': JSON.stringify({ 'moon-1': 2, 'moon-2': 1, 'moon-3': 3, 'rescue-mco': 2 }), ...extra };
+  return items;
+};
+
+test('home', async ({ page }, info) => {
+  await page.addInitScript((items) => {
+    localStorage.setItem('sd.seen', JSON.stringify(['coach', 'name', 'brief:moon-1', 'brief:moon-2', 'brief:moon-3', 'brief:mars', 'brief:venus', 'brief:bennu', 'brief:jupiter', 'launch:moon-1', 'launch:moon-2', 'launch:moon-3', 'launch:mars', 'launch:venus', 'launch:bennu', 'launch:jupiter', 'launch:free', 'launch:daily']));
+    for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v);
+  }, seedStorage());
+  await routeDonki(page);
+  await page.goto('/');
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(4500); // the pitch types out
+  await page.screenshot({ path: `test-results/shots/home-${info.project.name}.png` });
+  // The phone stacks MARS RIGHT NOW under the menu keys, below the fold.
+  if (info.project.name === 'mobile') await page.screenshot({ path: 'test-results/shots/home-full-mobile.png', fullPage: true });
+});
+
+test('daily', async ({ page }, info) => {
+  test.setTimeout(420_000);
+  const mobile = info.project.name === 'mobile';
+  await page.addInitScript((items) => {
+    localStorage.setItem('sd.seen', JSON.stringify(['coach', 'name', 'brief:moon-1', 'brief:moon-2', 'brief:moon-3', 'brief:mars', 'brief:venus', 'brief:bennu', 'brief:jupiter', 'launch:moon-1', 'launch:moon-2', 'launch:moon-3', 'launch:mars', 'launch:venus', 'launch:bennu', 'launch:jupiter', 'launch:free', 'launch:daily']));
+    for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v);
+    localStorage.removeItem('sd.daily');
+    localStorage.removeItem('mdt.ops');
+    localStorage.removeItem('sd.donki');
+  }, seedStorage());
+  await routeDonki(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /^DAILY MISSION/ }).click();
+  await expect(page.getByRole('img', { name: /Map: your robot/ })).toBeVisible({ timeout: 60_000 });
+  await flyToEnd(page, mobile);
+  await expect(page.getByRole('list', { name: 'How each danger went' })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `test-results/shots/daily-${info.project.name}.png` });
+});
+
+test('postcards', async ({ page }, info) => {
+  await page.addInitScript((items) => {
+    localStorage.setItem('sd.seen', JSON.stringify(['coach', 'name']));
+    for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v);
+  }, seedStorage({ 'sd.postcards': JSON.stringify({ earned: ['moon-earthrise', 'moon-tycho', 'moon-apollo11', 'mars-globe', 'mars-dunes'] }) }));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^POSTCARDS/ }).click();
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `test-results/shots/postcards-${info.project.name}.png`, fullPage: true });
+  await page.getByRole('button', { name: /^Sunrise on Tycho/ }).click();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `test-results/shots/postcard-open-${info.project.name}.png` });
+});

@@ -1,0 +1,389 @@
+// Mission Report (engine: src/engine/ops/report.ts): the 4-panel comic, what saved you / what hurt you, the
+// comparison with the real mission, and the star rules as Sourced values. Hand calculations in comments.
+import { describe, expect, it } from 'vitest';
+import { compareWithRealMission } from '../src/engine/compare';
+import { evaluateDesign } from '../src/engine/index';
+import { presetDesign } from '../src/engine/missions';
+import { advanceOperations, decide, operationsDebrief, runOperations, startOperations, type OpsState } from '../src/engine/ops/index';
+import { finalTransmission, reportCompare, reportPanels, reportVerdict } from '../src/engine/ops/report';
+import { oneWayAt } from '../src/engine/ops/commands';
+import { robotMessages } from '../src/engine/ops/voice';
+import { STAR_RULES, stars } from '../src/engine/scoring';
+import { buildPackDesign, initialPack, packPart, shelfFor } from '../src/engine/pack';
+import { starterDesign } from '../src/ui/starters';
+import { missionAlbum, sendCommand } from '../src/engine/ops/index';
+import { dailyGrid } from '../src/engine/daily';
+
+const maven = presetDesign('maven');
+
+/** Fly a whole prime mission with a policy, ending it at the extension decision. */
+const fly = (opts: { seed?: number; rng?: () => number }, policy: 'safe' | 'risky' | 'default' = 'safe'): OpsState =>
+  runOperations(maven, { ...opts, policy, extension: 'end' }).state;
+
+describe('star rules are Sourced', () => {
+  it('one star for the first science home, two at 50% of the science, three at 80%', () => {
+    expect(STAR_RULES.scienceForSecondStar.value).toBe(50);
+    expect(STAR_RULES.scienceForThirdStar.value).toBe(80);
+    expect(STAR_RULES.scienceForSecondStar.isGameEstimate).toBe(true);
+    expect(stars({ firstScienceHome: true, scienceScore: 49.9 })).toBe(1);
+    expect(stars({ firstScienceHome: true, scienceScore: 80 })).toBe(3);
+  });
+});
+
+describe('the comic: four key moments', () => {
+  it('a quiet mission: launch, arrival, the solar conjunction, then the end of the prime mission, in time order', () => {
+    const s = fly({ rng: () => 0.999999 });
+    const p = reportPanels(s);
+    expect(p.length).toBe(4);
+    expect(p[0]!.kind).toBe('launch');
+    expect(p[0]!.day).toBe(0);
+    expect(p[3]!.kind).toBe('complete');
+    expect(p.map((x) => x.kind)).toContain('arrival');
+    for (let i = 1; i < p.length; i++) expect(p[i]!.day).toBeGreaterThanOrEqual(p[i - 1]!.day);
+    const arr = p.find((x) => x.kind === 'arrival')!;
+    expect(arr.day).toBe(s.env.arrivalDay);
+    expect(arr.dv_ms).toBeGreaterThan(0);
+  });
+
+  it('a hazard you answered takes a middle panel, with your choice and how it went', () => {
+    const s = fly({ seed: 2013 }, 'safe');
+    const p = reportPanels(s);
+    const h = p.find((x) => x.kind === 'hazard')!;
+    const rec = s.hazards.find((x) => x.choice && Math.floor(x.onset) === h.day)!;
+    expect(h.hazardType).toBe(rec.type);
+    expect(h.optionId).toBe(rec.choice!.optionId);
+    expect(h.bad).toBe(rec.choice!.badOutcome ?? false);
+  });
+
+  it('a lost craft ends on the loss', () => {
+    let s = startOperations(maven, { seed: 2013 });
+    s = advanceOperations(s);
+    const dec = s.decisions.find((d) => !d.commanded && d.kind === 'hazard')!;
+    s = decide(s, dec.id, dec.hazardOptions!.at(-1)!.id).state;
+    const lost: OpsState = { ...advanceOperations(s, { until: s.t + 5 }), status: 'lost', failureT: s.t + 2, failedPhase: 'cruise' };
+    expect(reportPanels(lost).at(-1)!.kind).toBe('lost');
+  });
+});
+
+describe('what saved you, what hurt you', () => {
+  it('a packed shield that met a solar storm is what saved you; a bad outcome is what hurt you', () => {
+    const mars = starterDesign('mars', '2026-10-05');
+    const shielded = buildPackDesign(mars, packPart(initialPack(mars, shelfFor('mars')), 'shield')!);
+    const s = runOperations(shielded, { seed: 2013, policy: 'safe', extension: 'end' }).state;
+    const v = reportVerdict(s);
+    const storm = s.hazards.find((h) => h.type === 'solar-storm' && h.choice && !h.choice.badOutcome);
+    if (storm) expect(v.saved).toEqual({ code: 'part', part: 'shield', hazardType: 'solar-storm' });
+    const bad = s.hazards.find((h) => h.choice?.badOutcome);
+    if (bad) expect(v.hurt).toMatchObject({ code: 'bad-outcome', hazardType: bad.type, optionId: bad.choice!.optionId });
+  });
+
+  it('a quiet mission: nothing to save you from; the weakest score category is what hurt you', () => {
+    const s = fly({ rng: () => 0.999999 });
+    const v = reportVerdict(s);
+    expect(v.saved.code).toBe('quiet');
+    const d = operationsDebrief(s);
+    const weakest = [...d.breakdown].sort((a, b) => a.score - b.score)[0]!;
+    if (weakest.score < 40) expect(v.hurt).toEqual({ code: 'category', category: weakest.category, score: weakest.score });
+    else expect(v.hurt.code).toBe('nothing');
+  });
+});
+
+describe('you vs the real one', () => {
+  it('launch date and planned science life from the preset, then the engine’s mass, power and Δv rows', () => {
+    const ev = evaluateDesign(maven);
+    const c = reportCompare(maven, ev)!;
+    expect(c.missionId).toBe('maven');
+    expect(c.launch.you).toBe(ev.details.launchDate);
+    expect(c.launch.them.value).toBe(presetDesign('maven').launchDate);
+    expect(c.scienceDays.you).toBe(ev.details.scienceDays);
+    expect(c.scienceDays.them!.value).toBe(presetDesign('maven').scienceDays);
+    expect(c.rows).toEqual(compareWithRealMission(maven, ev)!.rows);
+    const venus = starterDesign('venus', '2026-10-05');
+    expect(reportCompare(venus, evaluateDesign(venus))).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FINAL TRANSMISSION: the robot's last words come off the teletype before the report (design screen 03).
+
+describe('final transmission', () => {
+  const maven = presetDesign('maven');
+  const DAY_S = 86_400;
+
+  it('a complete mission: opening, its moments in time order, then the sign-off; 3–5 lines', () => {
+    const s = runOperations(maven, { rng: () => 0.999999 }).state;
+    const ft = finalTransmission(s)!;
+    expect(ft.ending).toBe('complete');
+    expect(ft.lines.length).toBeGreaterThanOrEqual(3);
+    expect(ft.lines.length).toBeLessThanOrEqual(5);
+    expect(ft.lines[0]!.kind).toBe('opening');
+    expect(ft.lines.at(-1)!.kind).toBe('sign-off');
+    // The opening says the day it was sent and the science days flown.
+    expect(ft.lines[0]!.values.day).toBe(Math.floor(ft.sentAt));
+    expect(ft.lines[0]!.values.scienceDays).toBe(Math.floor(s.scienceDaysAchieved));
+    const middleDays = ft.lines.slice(1, -1).map((l) => l.values.day ?? 0);
+    expect([...middleDays].sort((a, b) => a - b)).toEqual(middleDays);
+    // A calm MAVEN: the arrival burn (its Δv) and the first conjunction (its length) are its moments.
+    const arrival = ft.lines.find((l) => l.kind === 'arrival')!;
+    expect(arrival.values.dv_ms).toBe(s.env.burns.find((b) => b.kind === 'arrival')!.dv_ms);
+    const conj = ft.lines.find((l) => l.kind === 'conjunction')!;
+    const w = s.env.conjunctions[0]!;
+    expect(conj.values.days).toBe(w.endDay - w.startDay + 1);
+  });
+
+  it('it is the robot’s last message: sent when it signed off, received one light time later', () => {
+    const s = runOperations(maven, { rng: () => 0.999999 }).state;
+    const ft = finalTransmission(s)!;
+    const last = robotMessages(s).at(-1)!;
+    expect(last.kind).toBe('signing-off');
+    expect(ft.sentAt).toBe(last.sentAt);
+    expect(ft.receivedAt).toBeCloseTo(ft.sentAt + oneWayAt(s.env, ft.sentAt) / DAY_S, 12);
+    expect(ft.delay_s).toBeCloseTo(oneWayAt(s.env, ft.sentAt), 6);
+  });
+
+  it('a lost robot: what happened, then a line cut off mid-word', () => {
+    // Seed 6: lost in the science phase after a missed deadline (the robot's default answer failed).
+    const s = runOperations(maven, { seed: 6, policy: 'default' }).state;
+    expect(s.status).toBe('lost');
+    const ft = finalTransmission(s)!;
+    expect(ft.ending).toBe('lost');
+    expect(ft.cutOff).toBe(true);
+    expect(ft.sentAt).toBeCloseTo(s.failureT!, 9);
+    expect(ft.lines.length).toBeGreaterThanOrEqual(3);
+    expect(ft.lines.length).toBeLessThanOrEqual(5);
+    expect(ft.lines.at(-1)!.kind).toBe('cut-off');
+    const cause = ft.lines.find((l) => l.kind === 'cause')!;
+    const bad = s.events.find((e) => e.code === 'response-outcome' && e.values.bad && Math.abs(e.t - s.failureT!) < 1e-9);
+    expect(cause.values.cause).toBe(bad ? 'hazard' : cause.values.cause);
+    if (bad) expect(cause.values.hazardType).toBe(s.hazards.find((h) => h.id === bad.values.hazardId)!.type);
+  });
+
+  it('an extended mission: fuel left, the years flown, and STILL HERE', () => {
+    const s = runOperations(maven, { rng: () => 0.999999, extension: 'longest' }).state;
+    const ft = finalTransmission(s)!;
+    expect(ft.ending).toBe('extended');
+    expect(ft.cutOff).toBe(false);
+    const ext = ft.lines.find((l) => l.kind === 'extension')!;
+    expect(ext.values.years).toBe(s.extension!.years);
+    const fuel = ft.lines.find((l) => l.kind === 'fuel')!;
+    expect(fuel.values.propellantLeft_kg).toBeCloseTo(s.mass_kg - s.env.dryMass_kg, 9);
+    expect(ft.lines.length).toBeLessThanOrEqual(5);
+  });
+
+  it('a launch failure sends nothing', () => {
+    expect(finalTransmission(runOperations(maven, { rng: () => 0 }).state)).toBeUndefined();
+  });
+
+  it('the same flight gives the same transmission', () => {
+    expect(finalTransmission(runOperations(maven, { seed: 2013 }).state)).toEqual(finalTransmission(runOperations(maven, { seed: 2013 }).state));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mission Album (spec: UI rule 43): one frame per target, home, partial or missing with why.
+
+describe('the mission album', () => {
+  const orbit = () => {
+    const s = startOperations(maven, { rng: () => 0.999999 });
+    const sci = s.env.timeline.find((w) => w.phase === 'science')!;
+    return advanceOperations(s, { until: sci.startDay + 0.1 });
+  };
+  const order = (s: OpsState, id: string) => sendCommand(s, { kind: 'observe', targetId: id }).state;
+
+  it('only at Mars (the destination with targets)', () => {
+    expect(missionAlbum(runOperations(presetDesign('osiris-rex'), { rng: () => 0.999999 }).state)).toBeUndefined();
+  });
+
+  it('a complete flight: the targets home, and why the others are empty', () => {
+    let s = orbit();
+    for (const id of ['valles-marineris', 'phobos', 'deimos']) s = order(s, id);
+    s = runOperationsFrom(s);
+    const a = missionAlbum(s)!;
+    expect(a.ending).toBe('complete');
+    expect(a.total).toBe(6);
+    expect(a.returned).toBe(2);
+    // 0.16 + 0.20 = 0.36
+    expect(a.science).toBeCloseTo(0.36, 12);
+    const f = (id: string) => a.frames.find((x) => x.targetId === id)!;
+    expect(f('valles-marineris').status).toBe('home');
+    expect(f('deimos')).toMatchObject({ status: 'missing', why: 'refused-fuel' });
+    expect(f('olympus-mons')).toMatchObject({ status: 'missing', why: 'never-ordered' });
+    expect(a.frames.reduce((x, y) => x + y.weight, 0)).toBeCloseTo(1, 12);
+    // The Debrief's science score is the album's.
+    expect(operationsDebrief(s).scores.science).toBeCloseTo(100 * a.science, 9);
+  });
+
+  it('a lost flight: pictures already home count, one never sent does not', () => {
+    let s = advanceOperations(order(orbit(), 'phobos'), { days: 5 });
+    s = { ...s, status: 'lost', failureT: s.t, images: [...s.images, { ...s.images[0]!, targetId: 'limb', status: 'on-board', sentBits: 0, sentAt: undefined, homeAt: undefined }] };
+    const a = missionAlbum(s)!;
+    expect(a.ending).toBe('lost');
+    expect(a.day).toBe(Math.floor(s.t));
+    expect(a.returned).toBe(1);
+    expect(a.frames.find((x) => x.targetId === 'limb')).toMatchObject({ status: 'missing', why: 'never-sent' });
+  });
+
+  it('the Daily share carries the science returned', () => {
+    const s = runOperationsFrom(order(orbit(), 'valles-marineris'));
+    expect(dailyGrid(s).science).toBeCloseTo(0.16, 12);
+  });
+});
+
+/** Fly on to the end of the prime mission, the craft answering on its own; retire at the extension. */
+function runOperationsFrom(s: OpsState): OpsState {
+  let x = s;
+  for (let i = 0; i < 1000 && (x.status === 'flying' || x.status === 'awaiting-extension'); i++) {
+    if (x.status === 'awaiting-extension') x = decide(x, 'extension', 'end').state;
+    else x = advanceOperations(x);
+  }
+  return x;
+}
+
+// ---------------------------------------------------------------------------
+// Team section (spec: Team mode, Team report): each role's key decision and its effect, and the team score from the
+// objective met, the conflicts resolved and the danger-card calls that matched the recommendation (TEAM_RULES).
+
+describe('team section', () => {
+  type Act = import('../src/engine/team/log').TeamAct;
+  type Role = import('../src/engine/team/roles').RoleId;
+  const tbase = starterDesign('mars', '2028-11-15');
+  const tshelf = shelfFor('mars');
+  const tday = { date: tbase.launchDate, arrivalDate: tbase.arrivalDate };
+  const opts = { seed: 19 }; // a solar storm in cruise (Comms & Ops) and an insertion anomaly (the Engineer)
+
+  async function flyTeam(choose: (recommended: string, safest: string) => string, extra: [Role, Act][] = []) {
+    const { LocalTransport } = await import('../src/engine/team/transport');
+    const { initialTeamState } = await import('../src/engine/team/reduce');
+    const { stepSession } = await import('../src/engine/team/replay');
+    const { TEAM_RULES, holderOf } = await import('../src/engine/team/roles');
+    const { openDecisions, advanceOperations: adv } = await import('../src/engine/ops/index');
+    const cs = TEAM_RULES.callSigns.value;
+    const team = {
+      seats: [
+        { id: 'p1' as const, callSign: cs[0]!, roles: ['flight-director' as const] },
+        { id: 'p2' as const, callSign: cs[1]!, roles: ['spacecraft-engineer' as const] },
+        { id: 'p3' as const, callSign: cs[2]!, roles: ['science-lead' as const, 'comms-ops' as const] },
+      ],
+    };
+    const seatOf = (r: Role) => holderOf(team, r)!;
+    const tr = new LocalTransport();
+    let sess: import('../src/engine/team/replay').TeamSession = { team: initialTeamState(tbase, tshelf) };
+    tr.subscribe((a) => (sess = stepSession(sess, a, opts).session));
+    const send = (role: Role, act: Act) => tr.send({ seat: seatOf(role), role, act, ...(sess.ops ? { t: sess.ops.t } : {}) });
+    send('flight-director', { kind: 'setup', team });
+    send('science-lead', { kind: 'pack', part: 'spectrometer' });
+    send('flight-director', { kind: 'objective', objective: 'moons' });
+    for (const [r, a] of extra) send(r, a);
+    send('flight-director', { kind: 'launch', day: tday });
+    let observed = false;
+    while (sess.ops!.status === 'flying') {
+      const sci = sess.ops!.env.timeline.find((w) => w.phase === 'science')!;
+      sess = { ...sess, ops: adv(sess.ops!, observed ? {} : { until: sci.startDay + 0.1 }) };
+      if (!observed && sess.ops!.t >= sci.startDay) {
+        observed = true;
+        for (const id of ['phobos', 'valles-marineris']) send('science-lead', { kind: 'ops', op: { kind: 'command', command: { kind: 'observe', targetId: id } } });
+      }
+      for (const d of openDecisions(sess.ops!)) {
+        if (d.kind !== 'hazard') continue;
+        const type = sess.ops!.hazards.find((h) => h.id === d.hazardId)!.type;
+        const rec = d.hazardOptions!.find((o) => o.id !== d.safestOptionId)?.id ?? d.safestOptionId!;
+        send(TEAM_RULES.hazardRoles.value[type]!, { kind: 'recommend', decisionId: d.id, optionId: rec });
+        send('flight-director', { kind: 'call', decisionId: d.id, optionId: choose(rec, d.safestOptionId!) });
+      }
+    }
+    const { finishOperations } = await import('../src/engine/ops/index');
+    return { log: tr.log(), team: sess.team, ops: finishOperations(sess.ops!) };
+  }
+
+  it('one row per role, in role order, with the seat that held it', async () => {
+    const { teamReport } = await import('../src/engine/team/report');
+    const r = await flyTeam((rec) => rec);
+    const rep = teamReport(r.log, r);
+    expect(rep.rows.map((x) => x.role)).toEqual(['flight-director', 'spacecraft-engineer', 'science-lead', 'comms-ops']);
+    expect(rep.rows.map((x) => x.seat)).toEqual(['p1', 'p2', 'p3', 'p3']);
+  });
+
+  it('each role’s key decision: the objective, the danger it recommended on, the pictures it ordered', async () => {
+    const { teamReport } = await import('../src/engine/team/report');
+    const r = await flyTeam((rec) => rec);
+    const rep = teamReport(r.log, r);
+    const row = (role: string) => rep.rows.find((x) => x.role === role)!.key;
+    expect(row('flight-director')).toMatchObject({ kind: 'objective', objective: 'moons' });
+    expect(row('spacecraft-engineer')).toMatchObject({ kind: 'card', hazardType: 'insertion-anomaly' });
+    expect(row('comms-ops')).toMatchObject({ kind: 'card', hazardType: 'solar-storm' });
+    const sl = row('science-lead');
+    expect(sl.kind).toBe('observe');
+    if (sl.kind === 'observe') {
+      // with the spectrometer and the moons objective: Phobos 0.375 + Valles (0.4 / 0.68) × 0.16 ≈ 0.469118
+      expect(sl.ordered).toEqual(['phobos', 'valles-marineris']);
+      expect(sl.science).toBeCloseTo(0.375 + (0.4 / 0.68) * 0.16, 9);
+    }
+  });
+
+  it('the team score: objective met (half), no conflicts (a quarter), calls that matched the recommendation (a quarter)', async () => {
+    const { teamReport } = await import('../src/engine/team/report');
+    const agreed = teamReport(...(await (async () => { const r = await flyTeam((rec) => rec); return [r.log, r] as const; })()));
+    // Phobos home: 0.20 / 0.32 = 0.625 ≥ 0.5 → met; both calls follow the recommendation → 100
+    expect(agreed.objective).toMatchObject({ met: true });
+    expect(agreed.votes).toEqual({ total: 2, agreed: 2 });
+    expect(agreed.conflicts).toEqual({ raised: 0, resolved: 0 });
+    expect(agreed.score).toBeCloseTo(100, 9);
+    const overruled = await flyTeam((_, safest) => safest);
+    const o = teamReport(overruled.log, overruled);
+    // both calls overrule the recommendation (it was the unsafe option): 0.5 + 0.25 + 0.25 × 0/2 = 75
+    expect(o.votes).toEqual({ total: 2, agreed: 0 });
+    expect(o.score).toBeCloseTo(75, 9);
+  });
+
+  it('the score in parts (T5 TEAM SCORE): agreements, conflicts solved, objective met, adding up to the score', async () => {
+    const { teamReport, teamScoreParts } = await import('../src/engine/team/report');
+    const r = await flyTeam((_, safest) => safest);
+    const rep = teamReport(r.log, r);
+    // overruled twice: agreements 0 of 2 → 0 of 25; no conflicts → 25 of 25; objective met → 50 of 50
+    expect(rep.parts).toEqual([
+      { id: 'votes', points: 0, max: 25, n: 0, of: 2 },
+      { id: 'conflicts', points: 25, max: 25, n: 0, of: 0 },
+      { id: 'objective', points: 50, max: 50, n: 1, of: 1 },
+    ]);
+    expect(rep.parts.reduce((a, x) => a + x.points, 0)).toBeCloseTo(rep.score, 9);
+    expect(rep.max).toBeCloseTo(100, 9); // 25 + 25 + 50
+    // no objective: the two parts share 100 in proportion (25 : 25 → 50 : 50); 1 of 2 resolved → 25, 1 of 1 → 50
+    const moon = teamScoreParts(undefined, { raised: 2, resolved: 1 }, { total: 1, agreed: 1 });
+    expect(moon).toEqual([
+      { id: 'votes', points: 50, max: 50, n: 1, of: 1 },
+      { id: 'conflicts', points: 25, max: 50, n: 1, of: 2 },
+    ]);
+  });
+
+  it('a card row says when it was settled and how the seats voted; every row has a verdict', async () => {
+    const { teamReport } = await import('../src/engine/team/report');
+    const r = await flyTeam((rec) => rec);
+    const rep = teamReport(r.log, r);
+    const comms = rep.rows.find((x) => x.role === 'comms-ops')!;
+    expect(comms.key.kind).toBe('card');
+    if (comms.key.kind === 'card') {
+      const call = r.log.find((a) => a.act.kind === 'call' && a.act.decisionId === Object.values(r.team.votes).find((v) => v.hazardType === 'solar-storm')!.decisionId)!;
+      expect(comms.key.day).toBe(call.t);
+      // p3 (Science + Comms) recommended, the Flight Director called the same option: 2 for, none against
+      expect(comms.key.support).toBe(2);
+      expect(comms.key.against).toBe(0);
+    }
+    // the objective was met; the pictures all came home; a card that went well
+    expect(rep.rows.map((x) => x.verdict)).toEqual(rep.rows.map((x) => (x.key.kind === 'card' && x.key.bad ? 'bad' : 'good')));
+  });
+
+  it('without an objective (the Moon) the other two parts share the score', async () => {
+    const { teamScore } = await import('../src/engine/team/report');
+    // conflicts 1 of 2 resolved, votes 1 of 1: (0.25 × 0.5 + 0.25 × 1) / 0.5 = 0.75 → 75
+    expect(teamScore(undefined, { raised: 2, resolved: 1 }, { total: 1, agreed: 1 })).toBeCloseTo(75, 9);
+    // with the objective met: 0.5 + 0.125 + 0.25 = 0.875 → 87.5
+    expect(teamScore(true, { raised: 2, resolved: 1 }, { total: 1, agreed: 1 })).toBeCloseTo(87.5, 9);
+  });
+
+  it('never touches the prime score or the stars: the same orders flown solo give the same debrief', async () => {
+    const { replayOperations, finishOperations } = await import('../src/engine/ops/index');
+    const r = await flyTeam((_, safest) => safest);
+    const solo = finishOperations(replayOperations(r.ops.env.design, opts, r.ops.actions));
+    expect(operationsDebrief(solo)).toEqual(operationsDebrief(r.ops));
+  });
+});

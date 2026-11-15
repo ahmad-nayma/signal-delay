@@ -1,0 +1,106 @@
+// Player facts (src/engine/facts.ts: what flights and rescues earned, for the badges) and the Daily mission
+// (src/engine/daily.ts).
+import { describe, expect, it } from 'vitest';
+import { CRISIS_CARDS } from '../src/engine/crisis';
+import { HAZARDS, LESSONS, OPERATIONS, PARTS } from '../src/engine/data';
+import { presetDesign } from '../src/engine/missions';
+import { runOperations } from '../src/engine/ops/index';
+import { rescueCase, RESCUE_CASE_IDS } from '../src/engine/rescue';
+import { emptyFacts, flightFacts, mergeFacts, rescueProgress } from '../src/engine/facts';
+import { DAILY_RULES, dailyDesign, dailyGrid, dailyNumber, dailySeed, dailyStreak, nextDailyIn_s } from '../src/engine/daily';
+import { fnv1a } from '../src/engine/ops/random';
+import { readFileSync } from 'node:fs';
+import { readSnapshot, realStorms } from '../src/engine/spaceWeather';
+import { starterDesign } from '../src/ui/starters';
+
+const sample = readSnapshot(readFileSync(new URL('./fixtures/donki/documented-format-sample.json', import.meta.url), 'utf8'))!;
+
+const maven = presetDesign('maven');
+
+describe('player facts', () => {
+  it('a flight’s facts: hazards faced (first day), conjunction and eclipse seasons flown through', () => {
+    const s = runOperations(maven, { seed: 2013, policy: 'safe', extension: 'end' }).state;
+    const f = flightFacts(s);
+    for (const h of s.hazards.filter((x) => x.choice)) expect(f.hazards[h.type]).toBeLessThanOrEqual(Math.floor(h.onset));
+    expect(f.conjunction).toBe(s.env.conjunctions.some((w) => w.startDay <= s.env.primeEndDay));
+    expect(f.eclipse).toBe(s.env.eclipseSeasons.some((e) => e.startDay <= s.env.primeEndDay));
+  });
+
+  it('merging keeps the earliest day and ORs the seasons', () => {
+    const before = { ...emptyFacts(), hazards: { debris: 40 } };
+    const after = mergeFacts(before, { hazards: { debris: 90, 'solar-storm': 214 }, conjunction: true, eclipse: false });
+    expect(after.hazards).toEqual({ debris: 40, 'solar-storm': 214 });
+    expect(after.conjunction).toBe(true);
+    expect(after.eclipse).toBe(false);
+  });
+
+  it('rescue progress: solved cases out of all cases', () => {
+    expect(rescueProgress({})).toEqual({ solved: 0, total: RESCUE_CASE_IDS.length });
+    expect(rescueProgress({ 'rescue-mco': 1 })).toEqual({ solved: 1, total: RESCUE_CASE_IDS.length });
+  });
+});
+
+describe('the Daily mission', () => {
+  it('the number counts days since the epoch; the seed hashes the date', () => {
+    expect(DAILY_RULES.epoch.isGameEstimate).toBe(true);
+    const e = DAILY_RULES.epoch.value;
+    expect(dailyNumber(e)).toBe(1);
+    expect(dailyNumber('2026-11-10')).toBe(1 + (Date.parse('2026-11-10') - Date.parse(e)) / 86_400_000);
+    expect(dailySeed('2026-11-10')).toBe(fnv1a('signal-delay-daily-2026-11-10'));
+    expect(dailySeed('2026-11-10')).not.toBe(dailySeed('2026-11-11'));
+  });
+
+  it('live weather: the seed hashes the date and the real storms’ DONKI ids, in any order', () => {
+    const storms = realStorms(sample);
+    const ids = storms.flatMap((x) => x.eventIds).sort().join(',');
+    expect(dailySeed('2026-11-10', storms)).toBe(fnv1a(`signal-delay-daily-2026-11-10|donki|${ids}`));
+    expect(dailySeed('2026-11-10', [...storms].reverse())).toBe(dailySeed('2026-11-10', storms));
+    const changed = storms.map((x, i) => (i === 0 ? { ...x, eventIds: ['2030-01-03T06:00:00-FLR-002'] } : x));
+    expect(dailySeed('2026-11-10', changed)).not.toBe(dailySeed('2026-11-10', storms));
+    // A live quiet week (no storms) is not the offline Daily, whose seed is the date alone.
+    expect(dailySeed('2026-11-10', [])).toBe(fnv1a('signal-delay-daily-2026-11-10|donki|'));
+    expect(dailySeed('2026-11-10', [])).not.toBe(dailySeed('2026-11-10'));
+  });
+
+  it('the grid records the weather and the real date of each real storm', () => {
+    const storms = realStorms(sample);
+    const design = dailyDesign(starterDesign('mars', '2026-11-10'));
+    const s = runOperations(design, { seed: dailySeed('2026-11-10', storms), storms, policy: 'safe', extension: 'end' }).state;
+    const live = dailyGrid(s, 'live');
+    expect(live.weather).toBe('live');
+    const real = s.hazards.filter((h) => h.choice && h.outcomeDone && h.real);
+    expect(real.length).toBeGreaterThan(0);
+    expect(live.rows.filter((r) => r.realDate).map((r) => r.realDate)).toEqual(real.map((h) => h.real!.date));
+    const off = dailyGrid(runOperations(design, { seed: dailySeed('2026-11-10'), policy: 'safe', extension: 'end' }).state, 'offline');
+    expect(off.weather).toBe('offline');
+    expect(off.rows.every((r) => r.realDate === undefined)).toBe(true);
+  });
+
+  it('streak: consecutive days played ending today (or yesterday, if today is not played yet)', () => {
+    expect(dailyStreak([], '2026-11-10')).toBe(0);
+    expect(dailyStreak(['2026-11-08', '2026-11-09', '2026-11-10'], '2026-11-10')).toBe(3);
+    expect(dailyStreak(['2026-11-08', '2026-11-09'], '2026-11-10')).toBe(2);
+    expect(dailyStreak(['2026-11-05', '2026-11-09'], '2026-11-10')).toBe(1);
+    expect(dailyStreak(['2026-11-01'], '2026-11-10')).toBe(0);
+  });
+
+  it('next daily: seconds to the next UTC midnight', () => {
+    const now = Date.parse('2026-11-10T23:00:00Z');
+    expect(nextDailyIn_s(now)).toBe(3600);
+  });
+
+  it('the grid: one row per hazard answered, held / cost / hurt', () => {
+    const s = runOperations(maven, { seed: 2013, policy: 'safe', extension: 'end' }).state;
+    const g = dailyGrid(s);
+    const answered = s.hazards.filter((h) => h.choice && h.outcomeDone);
+    expect(g.rows.length).toBe(answered.length);
+    g.rows.forEach((r, i) => {
+      const h = answered[i]!;
+      const o = HAZARDS[h.type]!.options.find((x) => x.id === h.choice!.optionId)!;
+      const paid = (o.cost.deltaV_ms?.value ?? 0) > 0 || (o.cost.scienceDays?.value ?? 0) > 0 || (o.cost.budget_M?.value ?? 0) > 0;
+      expect(r.type).toBe(h.type);
+      expect(r.result).toBe(h.choice!.badOutcome ? 'hurt' : paid ? 'cost' : 'held');
+    });
+    expect(g.alive).toBe(s.status !== 'lost');
+  });
+});

@@ -1,0 +1,171 @@
+// @vitest-environment jsdom
+// MISSION REPORT (Signal Delay screen 03): every line is operationsDebrief / ops/report.ts output, formatted.
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { presetDesign } from '../../src/engine/missions';
+import { advanceOperations, finishOperations, operationsDebrief, runOperations, sendCommand, startOperations } from '../../src/engine/ops/index';
+import { targetById } from '../../src/engine/targets';
+import { reportCompare, reportPanels } from '../../src/engine/ops/report';
+import type { Mode } from '../../src/ui/components/sd/ModeLever';
+import * as f from '../../src/ui/format';
+import { MissionReport, PANEL_STEP_MS } from '../../src/ui/screens/MissionReport';
+import { ALBUM, CATEGORY_NAME, panelWords, FINAL_WORDS, LAST_WORDS, OBJECTIVE_PICK_WORDS, OBJECTIVE_WORDS, PART_LOOK } from '../../src/ui/sdWords';
+import { objectiveResult } from '../../src/engine/ops/observe';
+import { buildPackDesign, initialPack, packPart, shelfFor, unpackPart } from '../../src/engine/pack';
+import { starterDesign } from '../../src/ui/starters';
+import type { ObjectiveId } from '../../src/engine/objectives';
+import type { Design } from '../../src/engine/types';
+import './setup';
+
+const maven = presetDesign('maven');
+const flown = runOperations(maven, { seed: 2013, policy: 'safe', extension: 'end' }).state;
+
+function open(mode: Mode = 'cadet') {
+  vi.useFakeTimers();
+  const onFlyAgain = vi.fn();
+  const onPlay = vi.fn();
+  render(
+    <MissionReport
+      state={flown}
+      design={maven}
+      mode={mode}
+      onMode={vi.fn()}
+      missionName="Orbiter-1"
+      next={{ title: 'Cloud Diver', onPlay }}
+      onFlyAgain={onFlyAgain}
+      onHome={vi.fn()}
+      homeLabel="MISSION MAP"
+    />,
+  );
+  return { onFlyAgain, onPlay };
+}
+
+describe('Mission Report', () => {
+  it('stars, stamp and the four panels come from the engine; the comic prints one panel at a time', () => {
+    open();
+    const d = operationsDebrief(flown);
+    expect(screen.getByLabelText(`${f.num(d.stars)} of 3 stars`)).toBeTruthy();
+    expect(document.querySelector('.rp-stamp')!.textContent).toBe('MISSIONCOMPLETE');
+    const panels = reportPanels(flown);
+    const figs = screen.getAllByRole('figure');
+    expect(figs.length).toBe(panels.length);
+    const ctx = { dest: 'Mars', rocket: 'Atlas V 401', label: () => '', title: () => '', autopilot: false, sent_Gbit: d.downlinked_Gbit };
+    panels.forEach((p, i) => expect(within(figs[i]!).getByText(panelWords(p, ctx).head)).toBeTruthy());
+    // The final transmission prints first; feeding the paper starts the comic.
+    act(() => vi.advanceTimersByTime(100));
+    expect(figs[0]!.className).not.toContain('on');
+    // At Mars the album comes first (spec: UI rule 43): feeding it brings the final transmission.
+    fireEvent.click(screen.getByRole('button', { name: ALBUM.feed }));
+    fireEvent.click(screen.getByRole('button', { name: FINAL_WORDS.feed }));
+    act(() => vi.advanceTimersByTime(100));
+    expect(figs[0]!.className).toContain('on');
+    expect(figs[3]!.className).not.toContain('on');
+    for (let t = 0; t < PANEL_STEP_MS * 4; t += 40) act(() => vi.advanceTimersByTime(40)); // each tick schedules the next
+    expect(figs[3]!.className).toContain('on');
+  }, 30_000);
+
+  it('you vs the real one: launch dates and planned science from the preset', () => {
+    open();
+    const c = reportCompare(maven, flown.env.ev)!;
+    const t = within(screen.getByRole('table', { name: 'You vs the real mission' }));
+    expect(t.getAllByText(f.isoDate(c.launch.them.value).toUpperCase()).length).toBeGreaterThan(0);
+    expect(t.getAllByText(f.days(c.scienceDays.them!.value).toUpperCase()).length).toBeGreaterThan(0);
+  });
+
+  it('FLY AGAIN and NEXT go back to the game', () => {
+    const { onFlyAgain, onPlay } = open();
+    fireEvent.click(screen.getByRole('button', { name: 'FLY AGAIN' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NEXT: CLOUD DIVER' }));
+    expect(onFlyAgain).toHaveBeenCalled();
+    expect(onPlay).toHaveBeenCalled();
+  });
+
+  it('Engineer details: the score breakdown Σ wᵢ sᵢ with the next-star row highlighted, and ⓘ on the comparison', () => {
+    open('engineer');
+    const d = operationsDebrief(flown);
+    const table = screen.getByRole('table', { name: 'Score breakdown' });
+    for (const b of d.breakdown) expect(within(table).getByText(CATEGORY_NAME[b.category])).toBeTruthy();
+    if (d.hintCategory) expect(within(table).getByText(CATEGORY_NAME[d.hintCategory]).closest('[role=row]')!.className).toContain('hint');
+    expect(screen.getByText(`NEXT STAR · ${d.hint}`)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /^Source of MAVEN/ }).length).toBeGreaterThan(2);
+  });
+});
+
+describe('Mission Album (spec: UI rule 43)', () => {
+  it('opens the report at Mars: targets returned, the science share, each picture with its NASA credit', () => {
+    let s = startOperations(maven, { rng: () => 0.999999 });
+    const sci = s.env.timeline.find((w) => w.phase === 'science')!;
+    s = advanceOperations(s, { until: sci.startDay + 0.1 });
+    for (const id of ['valles-marineris', 'phobos']) s = sendCommand(s, { kind: 'observe', targetId: id }).state;
+    s = finishOperations(s);
+    render(<MissionReport state={s} design={maven} mode="cadet" onMode={vi.fn()} missionName="Orbiter-1" onFlyAgain={vi.fn()} onHome={vi.fn()} homeLabel="HOME" />);
+    const album = screen.getByRole('region', { name: ALBUM.label });
+    // 0.16 + 0.20 = 36%
+    expect(within(album).getByText(ALBUM.returned('2', '6'))).toBeTruthy();
+    expect(within(album).getByText(ALBUM.ofScience('36%'))).toBeTruthy();
+    const valles = targetById('valles-marineris')!.image;
+    expect(within(album).getByText(ALBUM.credit(valles.credit, valles.mission))).toBeTruthy();
+    expect(within(album).getAllByText(ALBUM.notReturned).length).toBe(4);
+    // The final transmission waits for the paper to be fed.
+    expect(screen.queryByRole('region', { name: FINAL_WORDS.label })).toBeNull();
+    fireEvent.click(within(album).getByRole('button', { name: ALBUM.feed }));
+    expect(screen.getByRole('region', { name: FINAL_WORDS.label })).toBeTruthy();
+  });
+});
+
+describe('Mission Report: a solo flight’s objective (spec UI rule 56)', () => {
+  /** A Cadet Mars craft flown calm with every target ordered (as tests/objectives.test.ts flyAll). */
+  function flyObjective(objective: ObjectiveId, swap?: 'camera') {
+    const base: Design = { ...starterDesign('mars', '2028-11-15'), scienceTargets: true, objective };
+    const p0 = initialPack(base, shelfFor('mars'));
+    const d = buildPackDesign(base, swap ? packPart(unpackPart(p0, 'sniffer'), swap)! : p0);
+    let s = startOperations(d, { seed: 7, rng: () => 0.999999 });
+    s = advanceOperations(s, { until: s.env.timeline.find((x) => x.phase === 'science')!.startDay + 0.1 });
+    for (const id of ['phobos', 'deimos', 'limb', 'olympus-mons', 'valles-marineris', 'north-polar-cap'])
+      s = advanceOperations(sendCommand(s, { kind: 'observe', targetId: id }).state, { days: 0.5 });
+    return { d, s: finishOperations(s) };
+  }
+  const show = (d: Design, s: ReturnType<typeof flyObjective>['s']) =>
+    render(<MissionReport state={s} design={d} mode="cadet" onMode={vi.fn()} missionName="Orbiter-1" onFlyAgain={vi.fn()} onHome={vi.fn()} homeLabel="MISSION MAP" />);
+
+  it('met: the album head says how much of the objective’s science came home', () => {
+    const { d, s } = flyObjective('surface', 'camera');
+    const r = objectiveResult(s)!;
+    expect(r.met).toBe(true);
+    show(d, s);
+    const line = document.querySelector('.al-obj')!;
+    expect(line.textContent).toBe(OBJECTIVE_PICK_WORDS.result.met(OBJECTIVE_WORDS.objectives.surface.title, f.pct(r.favouredHome, 0)));
+    expect(line.className).toContain('met');
+  });
+
+  it('missed for want of a part: the starter (sniffer only) flown for surface', () => {
+    const { d, s } = flyObjective('surface');
+    show(d, s);
+    expect(document.querySelector('.al-obj')!.textContent).toBe(OBJECTIVE_PICK_WORDS.result.noPart(OBJECTIVE_WORDS.objectives.surface.title));
+    expect(document.querySelector('.al-obj')!.className).toContain('missed');
+  });
+
+  it('no objective (a real mission, the Daily): no line', () => {
+    open();
+    expect(document.querySelector('.al-obj')).toBeNull();
+  });
+});
+
+describe('Mission Report: NEXT TIME names a Pack part (spec UI rule 60)', () => {
+  // rng 0.05, safest answers: the memory corruption goes badly; the spare computer guards against it (packHint)
+  const base = starterDesign('mars', '2028-11-15');
+  const d = buildPackDesign(base, initialPack(base, shelfFor('mars')));
+  const unlucky = runOperations(d, { seed: 1, rng: () => 0.05, policy: 'safe' }).state;
+  const show = (shelf?: ReturnType<typeof shelfFor>) =>
+    render(<MissionReport state={unlucky} design={d} mode="cadet" onMode={vi.fn()} missionName="Orbiter-1" onFlyAgain={vi.fn()} onHome={vi.fn()} homeLabel="MISSION MAP" {...(shelf ? { shelf } : {})} />);
+
+  it('a solo level’s report says which part to pack next time', () => {
+    show(shelfFor('mars'));
+    expect(screen.getByText(LAST_WORDS.nextTime(PART_LOOK.spare.name))).toBeTruthy();
+  });
+
+  it('without a shelf (a team, the Daily, a real mission) there is no NEXT TIME line', () => {
+    show();
+    expect(document.querySelector('.rp-verdict-hint')).toBeNull();
+  });
+});

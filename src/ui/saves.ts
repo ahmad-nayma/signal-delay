@@ -1,0 +1,152 @@
+// What the player has done, kept in this browser only (a per-player convenience, like the level stars): the
+// The player's flight facts (badges) and the Daily results. Every read and write survives missing storage.
+import type { DailyGrid } from '../engine/daily';
+import { emptyFacts, type PlayerFacts } from '../engine/facts';
+import type { RoomSave } from '../engine/team/online';
+import { teamProblem, type Team } from '../engine/team/roles';
+import { cleanRobotName } from './sdWords';
+
+/** Player facts (facts.ts). The key keeps its old name so saved badges survive. */
+const NOTEBOOK_KEY = 'sd.notebook';
+const DAILY_KEY = 'sd.daily';
+
+type Flights = Omit<PlayerFacts, 'progress'>;
+
+function read<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    const v = raw ? (JSON.parse(raw) as unknown) : undefined;
+    return v && typeof v === 'object' ? (v as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function write(key: string, v: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    /* storage unavailable: this visit only */
+  }
+}
+
+export function loadFlights(): Flights {
+  const { progress: _p, ...empty } = emptyFacts();
+  const v = read<Partial<Flights>>(NOTEBOOK_KEY, {});
+  return { ...empty, ...v, hazards: { ...(v.hazards ?? {}) } };
+}
+export const saveFlights = (f: Flights) => write(NOTEBOOK_KEY, f);
+
+export interface DailySave {
+  played: string[];
+  results: Record<string, DailyGrid>;
+}
+export const loadDaily = (): DailySave => {
+  const v = read<Partial<DailySave>>(DAILY_KEY, {});
+  return { played: Array.isArray(v.played) ? v.played : [], results: v.results ?? {} };
+};
+export const saveDaily = (d: DailySave) => write(DAILY_KEY, d);
+
+/** Which help the player has already seen: level briefings ("brief:<level id>") and the flight coach ("coach"). */
+const SEEN_KEY = 'sd.seen';
+export const loadSeen = (): string[] => {
+  const v = read<unknown>(SEEN_KEY, []);
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+};
+export const saveSeen = (seen: string[]) => write(SEEN_KEY, seen);
+
+/** The robot's name, chosen on the name screen or Pack (empty means the default); cleaned again when read. */
+const ROBOT_KEY = 'sd.robot';
+export const loadRobotName = (): string => {
+  const v = read<{ name?: unknown }>(ROBOT_KEY, {});
+  return typeof v.name === 'string' ? cleanRobotName(v.name) : '';
+};
+export const saveRobotName = (name: string) => write(ROBOT_KEY, { name });
+
+/** Postcards from space: the ids of every card earned so far (postcards.ts). */
+const POSTCARDS_KEY = 'sd.postcards';
+export const loadPostcards = (): string[] => {
+  const v = read<{ earned?: unknown }>(POSTCARDS_KEY, {});
+  return Array.isArray(v.earned) ? v.earned.filter((x): x is string => typeof x === 'string') : [];
+};
+export const savePostcards = (earned: string[]) => write(POSTCARDS_KEY, { earned });
+
+/** Today's DONKI snapshot (the file's text), so the Daily stays the same all day (ui/donki.ts). */
+const DONKI_KEY = 'sd.donki';
+export const loadDonkiCache = (todayIso: string): string | undefined => {
+  const v = read<{ date?: unknown; text?: unknown }>(DONKI_KEY, {});
+  return v.date === todayIso && typeof v.text === 'string' ? v.text : undefined;
+};
+export const saveDonkiCache = (date: string, text: string) => write(DONKI_KEY, { date, text });
+
+/** The Mars globe: '3d' or '2d' when the player flipped the toggle (absent: the device decides). */
+const GLOBE_KEY = 'sd.globe';
+export const loadGlobeMode = (): '2d' | '3d' | undefined => {
+  const v = read<{ mode?: unknown }>(GLOBE_KEY, {});
+  return v.mode === '2d' || v.mode === '3d' ? v.mode : undefined;
+};
+export const saveGlobeMode = (mode: '2d' | '3d') => write(GLOBE_KEY, { mode });
+
+/** Team mode: the crew last set up (seats, call signs, roles), so the next team starts from it. */
+const TEAM_KEY = 'sd.team';
+export const loadTeam = (): Team | undefined => {
+  const v = read<{ seats?: unknown }>(TEAM_KEY, {});
+  const team = { seats: Array.isArray(v.seats) ? (v.seats as Team['seats']) : [] };
+  try {
+    const p = teamProblem(team);
+    // a crew saved mid-handover (a player left without a role) is still a fine place to start
+    return p === undefined || p === 'no-role' ? team : undefined;
+  } catch {
+    return undefined;
+  }
+};
+export const saveTeam = (team: Team) => write(TEAM_KEY, { seats: team.seats });
+
+/**
+ * Online room, on a phone: this browser's random token (never a name) and the last room it was in, so a reload rejoins
+ * the same seat.
+ */
+const ONLINE_KEY = 'sd.online';
+export const loadOnline = (): { token?: string; code?: string } => {
+  const v = read<{ token?: unknown; code?: unknown }>(ONLINE_KEY, {});
+  return { ...(typeof v.token === 'string' ? { token: v.token } : {}), ...(typeof v.code === 'string' ? { code: v.code } : {}) };
+};
+export const saveOnline = (v: { token: string; code?: string }) => write(ONLINE_KEY, v);
+
+/** Online room, on the host screen: each room's mission under its resume code (the room ends; the code brings it back). */
+const ROOMS_KEY = 'sd.rooms';
+export const loadRooms = (): Record<string, RoomSave> => read<Record<string, RoomSave>>(ROOMS_KEY, {});
+export const saveRooms = (rooms: Record<string, RoomSave>) => write(ROOMS_KEY, rooms);
+
+/**
+ * Each solo Cadet level's last packing and mission objective (spec UI rule 56), so opening the level again, even after
+ * a reload, picks up where the player left off. Part ids only, in packing order: App re-packs them through the engine
+ * (packPart), so a stale or edited save can never place a part that does not fit. The launch-day pick is not kept (it
+ * indexes a calendar built around today).
+ */
+const PACK_KEY = 'sd.pack';
+export interface LevelPackSave {
+  parts: string[];
+  objective?: string;
+  /** The rocket option picked (pack.ts rocketIdOf; spec UI rule 58). */
+  rocket?: string;
+  /** The science-orbit preset picked (orbitPresets.ts orbitIdOf; spec UI rule 59). */
+  orbit?: string;
+}
+export const loadLevelPacks = (): Record<string, LevelPackSave> => {
+  const v = read<Record<string, unknown>>(PACK_KEY, {});
+  const out: Record<string, LevelPackSave> = {};
+  for (const [id, x] of Object.entries(v)) {
+    if (!x || typeof x !== 'object') continue;
+    const { parts, objective, rocket, orbit } = x as { parts?: unknown; objective?: unknown; rocket?: unknown; orbit?: unknown };
+    if (!Array.isArray(parts)) continue;
+    out[id] = {
+      parts: parts.filter((p): p is string => typeof p === 'string'),
+      ...(typeof objective === 'string' ? { objective } : {}),
+      ...(typeof rocket === 'string' ? { rocket } : {}),
+      ...(typeof orbit === 'string' ? { orbit } : {}),
+    };
+  }
+  return out;
+};
+export const saveLevelPack = (levelId: string, save: LevelPackSave) => write(PACK_KEY, { ...loadLevelPacks(), [levelId]: save });

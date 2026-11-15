@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Delay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+/* Signal Delay. One visual world: mission control at night, built on the team style sheet.
+   Layout idea: a three-zone console (step rail, decisions, live telemetry) under a thin status bar. */
+:root {
+  color-scheme: dark;
+  --ink: #0D1B2A;        /* page */
+  --navy: #0B1D3A;       /* panels */
+  --navy-2: #12294F;     /* raised panels */
+  --cyan: #00D2FF;       /* secondary: live values, selection, glow */
+  --blue: #0099FF;       /* secondary: links, second role */
+  --orange: #FF9900;     /* accent: the one action that matters */
+  --amber: #FFAE00;      /* accent: caution */
+  --tan: #C68B59;        /* character tone */
+  --sand: #D49B6A;       /* character tone */
+  --white: #FFFFFF;
+  --mute: #9DB2CF;       /* secondary text, navy-biased grey */
+  --line: rgba(0, 210, 255, .20);
+  --bad: #FF5D6C;        /* semantic: blocked */
+  --display: 'Orbitron', 'Eurostile', 'Bank Gothic', 'Trebuchet MS', sans-serif;
+  --body: 'JetBrains Mono', 'DejaVu Sans Mono', 'Menlo', 'Consolas', monospace;
+  --shadow-1: 0 4px 8px rgba(0, 0, 0, .20);
+  --shadow-2: 0 4px 8px rgba(0, 0, 0, .15);
+  --shadow-3: 0 2px 4px rgba(0, 0, 0, .10);
+  --glow: 0 0 14px #00D2FF;
+  --leaf: 14px 4px 14px 4px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--ink);
+  background-image: radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.55) 50%, transparent 51%), radial-gradient(1px 1px at 68% 9%, rgba(255,255,255,.4) 50%, transparent 51%), radial-gradient(1px 1px at 84% 62%, rgba(255,255,255,.45) 50%, transparent 51%), radial-gradient(1px 1px at 31% 77%, rgba(255,255,255,.35) 50%, transparent 51%), radial-gradient(1px 1px at 52% 41%, rgba(255,255,255,.3) 50%, transparent 51%);
+  background-size: 640px 640px;
+  color: var(--white); font-family: var(--body); font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--display); font-weight: 700; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: .02em; }
+p { margin: 0; }
+a { color: var(--cyan); font-weight: 600; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.mute { color: var(--mute); }
+.eng-only { display: none; }
+body.engineer .eng-only { display: revert; }
+body.engineer .cadet-only { display: none; }
+
+/* ---------- status bar ---------- */
+.bar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 20px; background: rgba(13, 27, 42, .94); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.brand { font-family: var(--display); font-weight: 900; letter-spacing: .28em; font-size: 15px; background: none; border: 0; padding: 0; display: flex; align-items: center; gap: 10px; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); box-shadow: var(--glow); display: inline-block; }
+.bar .spacer { flex: 1; }
+.owlt { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--mute); }
+.owlt b { color: var(--cyan); font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 6px 14px; font-family: var(--display); font-weight: 700; font-size: 11px; letter-spacing: .12em; color: var(--mute); }
+.seg button[aria-pressed="true"] { background: var(--cyan); color: var(--navy); }
+.link { background: none; border: 0; color: var(--cyan); font-weight: 600; padding: 4px 2px; font-size: 13px; }
+.link:hover { text-decoration: underline; }
+
+/* ---------- buttons ---------- */
+.btn { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .08em; padding: 12px 22px; border-radius: var(--leaf); border: 1px solid var(--cyan); background: transparent; color: var(--cyan); box-shadow: var(--shadow-3); transition: box-shadow .15s, transform .15s; }
+.btn:hover { box-shadow: var(--glow); }
+.btn.primary { background: var(--orange); border-color: var(--orange); color: var(--navy); }
+.btn.primary:hover { box-shadow: 0 0 14px var(--orange); }
+.btn[disabled] { opacity: .4; cursor: not-allowed; box-shadow: none; }
+.btn.small { font-size: 11px; padding: 8px 14px; }
+
+/* ---------- home ---------- */
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px 64px; }
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 40px; align-items: center; padding: 48px 0 36px; }
+.eyebrow { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--cyan); margin-bottom: 14px; }
+.display { font-size: clamp(44px, 8vw, 72px); font-weight: 900; letter-spacing: .06em; text-transform: uppercase; line-height: .98; }
+.display span { color: var(--cyan); text-shadow: 0 0 18px rgba(0, 210, 255, .55); }
+.lede { font-size: 16px; max-width: 46ch; margin-top: 18px; color: #DCE7F7; }
+.lanes { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 18px 20px; box-shadow: var(--shadow-1); display: grid; gap: 16px; }
+.lanes h2 { font-size: 12px; letter-spacing: .2em; color: var(--mute); }
+.lane { display: grid; gap: 6px; }
+.lane-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.lane-top b { font-family: var(--display); letter-spacing: .08em; }
+.track { position: relative; height: 14px; }
+.track::before { content: ''; position: absolute; left: 6px; right: 6px; top: 6px; border-top: 2px dashed rgba(0, 210, 255, .35); }
+.track .earth, .track .body { position: absolute; top: 1px; width: 12px; height: 12px; border-radius: 50%; }
+.track .earth { left: 0; background: var(--blue); }
+.track .body { right: 0; background: var(--sand); }
+.track .pulse { position: absolute; top: 3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--cyan); box-shadow: var(--glow); }
+.lane small { color: var(--mute); font-size: 12px; }
+
+.setup { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 36px; }
+.panel { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 18px; box-shadow: var(--shadow-2); }
+.panel h3 { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--cyan); margin-bottom: 12px; }
+.modes { display: grid; gap: 10px; }
+.mode { text-align: left; background: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; }
+.mode b { font-family: var(--display); letter-spacing: .1em; font-size: 15px; }
+.mode span { color: var(--mute); font-size: 13px; }
+.mode[aria-pressed="true"] { border-color: var(--cyan); box-shadow: var(--glow); }
+.count { display: flex; gap: 8px; margin-bottom: 12px; }
+.count button { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink); font-family: var(--display); font-weight: 700; }
+.count button[aria-pressed="true"] { background: var(--cyan); color: var(--navy); border-color: var(--cyan); }
+.crew { display: grid; gap: 8px; }
+.crew label { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+input[type="text"] { width: 100%; background: var(--ink); border: 1px solid var(--line); border-radius: 8px; color: var(--white); font: inherit; padding: 8px 10px; }
+.tagrole { font-family: var(--display); font-weight: 700; font-size: 10px; letter-spacing: .1em; padding: 3px 6px; border-radius: 4px; color: var(--navy); text-align: center; }
+.r-pi { background: var(--cyan); } .r-se { background: var(--blue); } .r-fd { background: var(--orange); } .r-ops { background: var(--sand); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+.check input { width: 18px; height: 18px; accent-color: var(--cyan); margin-top: 2px; }
+
+.sec-title { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 0 0 14px; }
+.sec-title h2 { font-size: 24px; text-transform: uppercase; letter-spacing: .08em; }
+.missions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.mission { text-align: left; background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 16px; display: grid; gap: 10px; align-content: start; box-shadow: var(--shadow-2); transition: box-shadow .15s, transform .15s; }
+.mission:hover { box-shadow: var(--glow); transform: translateY(-2px); }
+.mission .planet { width: 54px; height: 54px; border-radius: 50%; }
+.mission h3 { font-size: 20px; letter-spacing: .08em; text-transform: uppercase; }
+.mission .tag { color: var(--cyan); font-size: 12px; letter-spacing: .08em; }
+.mission p { color: #DCE7F7; font-size: 13px; }
+.mission dl { margin: 0; display: grid; gap: 4px; font-size: 12px; }
+.mission dl div { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 4px; }
+.mission dt { color: var(--mute); } .mission dd { margin: 0; text-align: right; }
+.level { display: flex; gap: 4px; } .level i { width: 14px; height: 4px; background: rgba(255,255,255,.18); border-radius: 2px; } .level i.on { background: var(--orange); }
+.foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--mute); font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+
+/* ---------- design console ---------- */
+.console { display: grid; grid-template-columns: 210px minmax(0, 1fr) 340px; gap: 18px; max-width: 1400px; margin: 0 auto; padding: 18px 20px 64px; align-items: start; }
+.rail { position: sticky; top: 64px; display: grid; gap: 6px; }
+.rail .mname { font-family: var(--display); font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
+.rail .cml { font-size: 11px; color: var(--amber); letter-spacing: .06em; margin: 2px 0 10px; }
+.stepbtn { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; text-align: left; background: none; border: 1px solid transparent; border-radius: 10px; padding: 8px 8px; }
+.stepbtn .n { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-family: var(--display); font-size: 11px; font-weight: 700; color: var(--mute); }
+.stepbtn .t { font-size: 13px; } .stepbtn .s { display: block; font-size: 10px; color: var(--mute); letter-spacing: .08em; text-transform: uppercase; }
+.stepbtn[aria-current="step"] { background: var(--navy); border-color: var(--cyan); box-shadow: var(--glow); }
+.stepbtn[aria-current="step"] .n { background: var(--cyan); color: var(--navy); border-color: var(--cyan); }
+.stepbtn .dot { width: 8px; height: 8px; border-radius: 50%; } .dot.bad { background: var(--bad); } .dot.warn { background: var(--amber); }
+.main { display: grid; gap: 16px; min-width: 0; }
+.stephead { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+.stephead h2 { font-size: 32px; text-transform: uppercase; letter-spacing: .06em; }
+.stephead .why { color: #DCE7F7; max-width: 62ch; margin-top: 8px; font-size: 14px; }
+.owner { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mute); }
+.group { display: grid; gap: 10px; }
+.group > h3 { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--cyan); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.group > h3 small { font-family: var(--body); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--mute); font-size: 12px; }
+.group > p.note { color: var(--mute); font-size: 13px; max-width: 70ch; }
+.opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.opt { text-align: left; background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 12px 14px; display: grid; gap: 6px; align-content: start; box-shadow: var(--shadow-3); transition: box-shadow .15s, border-color .15s; }
+.opt:hover { border-color: var(--cyan); }
+.opt.sel { border-color: var(--cyan); box-shadow: var(--glow); background: var(--navy-2); }
+.opt.dim { opacity: .55; }
+.opt-h { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .04em; display: flex; justify-content: space-between; gap: 8px; }
+.opt-h em { font-style: normal; font-family: var(--body); font-size: 11px; font-weight: 400; color: var(--navy); background: var(--cyan); border-radius: 4px; padding: 1px 6px; align-self: start; white-space: nowrap; }
+.opt-d { color: #DCE7F7; font-size: 13px; }
+.opt-n { color: var(--amber); font-size: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.chip { font-size: 11px; border: 1px solid rgba(255,255,255,.16); border-radius: 4px; padding: 1px 6px; color: var(--mute); }
+.chip b { color: var(--white); font-weight: 600; }
+.src { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; border-radius: 3px; padding: 1px 5px; border: 1px solid var(--line); color: var(--cyan); }
+.src.est { color: var(--amber); border-color: rgba(255, 174, 0, .4); }
+.slider { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 12px 14px; display: grid; gap: 6px; }
+.slider label { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.slider output { color: var(--cyan); font-weight: 600; }
+.slider small { color: var(--mute); font-size: 12px; }
+input[type="range"] { width: 100%; accent-color: var(--cyan); }
+.stepper { display: inline-flex; align-items: center; gap: 10px; }
+.stepper button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--ink); font-weight: 700; }
+.navrow { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.table th { color: var(--mute); font-weight: 400; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.table td.r, .table th.r { text-align: right; }
+.scroll { overflow-x: auto; }
+details.numbers { background: var(--navy); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; }
+details.numbers summary { cursor: pointer; font-family: var(--display); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+.plot { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 8px; }
+.plot canvas { width: 100%; height: 240px; display: block; }
+
+/* ---------- telemetry ---------- */
+.tele { position: sticky; top: 64px; display: grid; gap: 12px; }
+.tip { display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: start; background: var(--navy-2); border: 1px solid var(--line); border-radius: var(--leaf); padding: 10px 12px; }
+.tip svg { width: 54px; height: 54px; }
+.tip b { font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--sand); display: block; }
+.tip p { font-size: 13px; }
+.tip p + p { color: var(--mute); margin-top: 4px; }
+.craft { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 6px; }
+.craft svg { width: 100%; height: auto; display: block; }
+.meters { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 12px 14px; display: grid; gap: 10px; }
+.meter { display: grid; gap: 3px; }
+.meter-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.meter-top b { font-family: var(--display); letter-spacing: .1em; font-size: 11px; text-transform: uppercase; }
+.meter-top span { color: var(--mute); }
+.mbar { position: relative; height: 8px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+.mbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--cyan); transition: width .25s; }
+.mbar u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(255,255,255,.6); }
+.meter.tight .mbar i { background: var(--amber); } .meter.bad .mbar i { background: var(--bad); }
+.meter small { font-size: 11px; color: var(--mute); }
+.meter.tight small { color: var(--amber); } .meter.bad small { color: var(--bad); }
+.forecast { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 10px 14px; }
+.forecast b { font-family: var(--display); font-size: 24px; color: var(--cyan); }
+.forecast span { font-size: 12px; color: var(--mute); }
+.goals { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 12px 14px; display: grid; gap: 8px; }
+.goals h3 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
+.goal { display: grid; grid-template-columns: 42px 1fr 18px; gap: 8px; align-items: start; font-size: 12px; }
+.tick { font-weight: 700; } .tick.ok { color: var(--cyan); } .tick.no { color: var(--mute); }
+
+/* ---------- review ---------- */
+.reqs { display: grid; gap: 6px; }
+.req { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; background: var(--navy); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.req.ok { border-color: rgba(0, 210, 255, .35); } .req.no { border-color: rgba(255, 174, 0, .45); }
+.issue { background: var(--navy); border-left: 4px solid var(--cyan); border-radius: 4px 10px 10px 4px; padding: 10px 12px; display: grid; gap: 4px; }
+.issue.block { border-left-color: var(--bad); } .issue.warn { border-left-color: var(--amber); }
+.issue b { font-family: var(--display); font-size: 13px; letter-spacing: .04em; }
+.issue .k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+.issue.block .k { color: var(--bad); } .issue.warn .k { color: var(--amber); } .issue.info .k { color: var(--cyan); }
+.issue p { font-size: 13px; color: #DCE7F7; } .issue p.fix { color: var(--mute); }
+.mc { display: grid; grid-template-columns: repeat(50, 1fr); gap: 2px; }
+.mc i { aspect-ratio: 1; border-radius: 50%; background: var(--cyan); opacity: .85; }
+.mc i.launch { background: var(--bad); } .mc i.cruise { background: var(--amber); } .mc i.arrival { background: var(--orange); } .mc i.ops { background: var(--tan); } .mc i.sample { background: var(--blue); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--mute); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+.poll { display: flex; flex-wrap: wrap; gap: 8px; }
+.poll button { border: 1px solid var(--line); background: var(--ink); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; text-align: left; min-width: 150px; }
+.poll button b { font-family: var(--display); font-size: 13px; letter-spacing: .1em; }
+.poll button[aria-pressed="true"] { border-color: var(--cyan); box-shadow: var(--glow); }
+.poll button[aria-pressed="true"] b { color: var(--cyan); }
+.launchrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.spend { display: flex; height: 16px; border-radius: 4px; overflow: hidden; }
+.spend i { display: block; }
+
+/* ---------- flight ---------- */
+.flight { max-width: 1280px; margin: 0 auto; padding: 18px 20px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+.phases { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.phase { font-family: var(--display); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--mute); }
+.phase.on { background: var(--cyan); color: var(--navy); border-color: var(--cyan); box-shadow: var(--glow); } .phase.done { color: var(--cyan); }
+.stage { position: relative; background: #060F1C; border: 1px solid var(--line); border-radius: var(--leaf); overflow: hidden; box-shadow: var(--shadow-1); }
+.stage canvas { width: 100%; height: 520px; display: block; }
+.hud { position: absolute; left: 14px; top: 12px; display: grid; gap: 2px; pointer-events: none; }
+.hud .big { font-family: var(--display); font-size: 22px; color: var(--cyan); text-shadow: 0 0 12px rgba(0,210,255,.5); }
+.hud small { color: var(--mute); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.hud .clock { margin-top: 8px; font-size: 13px; }
+.ctrl { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 8px; }
+.side { display: grid; gap: 12px; }
+.log { background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 12px 14px; max-height: 420px; overflow: auto; display: grid; gap: 8px; align-content: start; }
+.log h3 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
+.log p { font-size: 13px; border-left: 2px solid var(--line); padding-left: 8px; }
+.log p.bad { border-color: var(--bad); } .log p.good { border-color: var(--cyan); } .log p.warn { border-color: var(--amber); }
+.log p small { display: block; color: var(--mute); font-size: 11px; }
+.crisis { position: fixed; inset: 0; z-index: 40; background: rgba(6, 15, 28, .88); display: grid; place-items: center; padding: 16px; overflow: auto; }
+.crisis-card { width: min(680px, 100%); margin: auto; background: var(--navy); border: 1px solid var(--amber); border-radius: var(--leaf); padding: 18px 20px; display: grid; gap: 12px; box-shadow: 0 0 22px rgba(255, 174, 0, .35); }
+.crisis-card .k { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--amber); }
+.crisis-card h3 { font-size: 24px; text-transform: uppercase; letter-spacing: .04em; }
+.crisis-card .real { font-size: 12px; color: var(--mute); border-left: 2px solid var(--tan); padding-left: 10px; }
+.crisis-card .delay { font-size: 13px; color: var(--cyan); }
+.choice { text-align: left; background: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 3px; width: 100%; }
+.choice:hover:not([disabled]) { border-color: var(--cyan); box-shadow: var(--glow); }
+.choice b { font-size: 14px; } .choice span { font-size: 12px; color: var(--mute); } .choice em { font-style: normal; font-size: 12px; color: var(--amber); }
+.choice[disabled] { opacity: .45; cursor: not-allowed; }
+.transit { display: grid; gap: 8px; }
+.transit .track { height: 14px; }
+.outcome { font-size: 14px; }
+
+/* ---------- debrief ---------- */
+.debrief { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; display: grid; gap: 22px; }
+.verdict { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; background: var(--navy); border: 1px solid var(--line); border-radius: var(--leaf); padding: 24px; box-shadow: var(--shadow-1); }
+.verdict.success { border-color: var(--cyan); box-shadow: var(--glow); } .verdict.failure { border-color: var(--bad); } .verdict.partial { border-color: var(--amber); }
+.verdict h1 { font-size: clamp(30px, 5vw, 56px); text-transform: uppercase; letter-spacing: .05em; }
+.verdict.success h1 { color: var(--cyan); } .verdict.failure h1 { color: var(--bad); } .verdict.partial h1 { color: var(--amber); }
+.verdict p { margin-top: 10px; max-width: 60ch; color: #DCE7F7; font-size: 15px; }
+.scorebox { text-align: right; }
+.scorebox .n { font-family: var(--display); font-weight: 900; font-size: 64px; line-height: 1; }
+.scorebox .of { color: var(--mute); font-size: 12px; }
+.stars { color: var(--orange); font-size: 22px; letter-spacing: 4px; } .stars s { color: rgba(255,255,255,.18); text-decoration: none; }
+.rank { font-family: var(--display); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.brk { display: grid; gap: 8px; }
+.brk-row { display: grid; grid-template-columns: 180px 1fr 84px; gap: 10px; align-items: center; font-size: 13px; }
+.chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.link-box { background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 96px; }
+.link-box small { display: block; color: var(--mute); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.link-box b { font-family: var(--display); font-size: 16px; }
+.link-box.low b { color: var(--amber); } .link-box.end b { color: var(--cyan); }
+.chain .x { align-self: center; color: var(--mute); }
+.comic { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.comic figure { margin: 0; background: var(--white); color: var(--navy); border: 3px solid var(--navy); outline: 1px solid var(--cyan); border-radius: 4px 14px 4px 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.comic svg { width: 100%; height: auto; display: block; background: #EAF4FF; }
+.comic figcaption { padding: 8px 10px 10px; font-size: 12px; line-height: 1.4; border-top: 3px solid var(--navy); }
+.comic figcaption b { font-family: var(--display); display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); margin-bottom: 2px; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.code { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.code input { flex: 1; min-width: 200px; font-size: 12px; }
+.toast { color: var(--cyan); font-size: 12px; }
+
+/* ---------- modal ---------- */
+.modal { position: fixed; inset: 0; z-index: 50; background: rgba(6, 15, 28, .85); display: grid; place-items: center; padding: 16px; }
+.modal-card { width: min(760px, 100%); max-height: min(86vh, 800px); overflow: auto; background: var(--navy); border: 1px solid var(--cyan); border-radius: var(--leaf); padding: 20px 22px; display: grid; gap: 14px; box-shadow: var(--glow); }
+.modal-card h2 { font-size: 24px; text-transform: uppercase; letter-spacing: .06em; }
+.modal-card dl { margin: 0; display: grid; gap: 10px; }
+.modal-card dt { font-family: var(--display); font-size: 13px; letter-spacing: .06em; color: var(--cyan); }
+.modal-card dd { margin: 2px 0 0; font-size: 13px; color: #DCE7F7; max-width: 68ch; }
+.modal-card ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1100px) {
+  .console { grid-template-columns: minmax(0, 1fr) 320px; }
+  .rail { position: static; grid-column: 1 / -1; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 6px; }
+  .rail .head { display: none; }
+  .missions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .comic { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .hero { grid-template-columns: 1fr; padding-top: 28px; gap: 24px; }
+  .setup, .cols { grid-template-columns: 1fr; }
+  .missions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console { grid-template-columns: 1fr; }
+  .tele { position: static; order: 2; }
+  .main { order: 3; }
+  .flight { grid-template-columns: 1fr; }
+  .stage canvas { height: 380px; }
+  .verdict { grid-template-columns: 1fr; } .scorebox { text-align: left; }
+  .stephead h2 { font-size: 24px; }
+  .brk-row { grid-template-columns: 96px 1fr 60px; }
+}
+@media (max-width: 460px) {
+  .missions { grid-template-columns: 1fr; }
+  .comic { grid-template-columns: 1fr; }
+  .bar { padding: 8px 16px; gap: 10px; }
+  .owlt span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+</style>
+</head>
+<body class="cadet">
+<div id="app"></div>
+<script>
+/* Signal Delay — simulation engine. Pure functions, no DOM. Runs in the browser and in Node.
+   Every number is tagged in SOURCES below as NASA-published, computed, or a game estimate. */
+(function (root) {
+  'use strict';
+
+  var K = {
+    g0: 9.80665,            // m/s², SI exact
+    AU: 149597870.7,        // km, IAU 2012
+    c: 299792.458,          // km/s, SI exact
+    S0: 1361.0,             // W/m² at 1 AU, NASA Earth Fact Sheet
+    muSun: 1.32712e11,      // km³/s²
+    etaSolar: 0.20,         // system efficiency, calibrated to MAVEN (12 m² → 1,150–1,700 W at Mars)
+    tankFrac: 0.12,         // tank mass per kg of propellant (game approximation)
+    growth: 0.30,           // concept-stage mass growth allowance
+    dod: 0.30,              // usable battery depth of discharge (game estimate)
+    tcm: 50,                // m/s reserved for trajectory corrections
+    dsnRate: 1057,          // $/hour base DSN aperture fee (FY09)
+    linkRef: { kbps: 500, pt: 100, d: 3, dist: 400e6 } // MRO anchor: 100 W, 3 m dish, 34 m station, 400 million km
+  };
+
+  /* ---------- orbital mechanics ---------- */
+  function hohmann(r1, r2) {
+    var mu = K.muSun, at = (r1 + r2) / 2;
+    var v1 = Math.sqrt(mu / r1), v2 = Math.sqrt(mu / r2);
+    var vd = Math.sqrt(mu * (2 / r1 - 1 / at)), va = Math.sqrt(mu * (2 / r2 - 1 / at));
+    return { c3: Math.pow(vd - v1, 2), tof: Math.PI * Math.sqrt(at * at * at / mu) / 86400, vinf: Math.abs(v2 - va) };
+  }
+  // Faster, non-Hohmann transfer: leave tangentially, aim past the target orbit, cross it early.
+  function fastTransfer(r1, r2, f) {
+    var mu = K.muSun, outward = r2 > r1, X = outward ? r2 * f : r2 / f;
+    var a = (r1 + X) / 2, e = Math.abs(X - r1) / (X + r1), p = a * (1 - e * e);
+    var cosnu = Math.max(-1, Math.min(1, (p / r2 - 1) / e)), nu = Math.acos(cosnu);
+    var E = 2 * Math.atan(Math.sqrt((1 - e) / (1 + e)) * Math.tan(nu / 2));
+    var n = Math.sqrt(mu / (a * a * a)), tPeri = (E - e * Math.sin(E)) / n, T = 2 * Math.PI / n;
+    var tof = outward ? tPeri : T / 2 - tPeri;
+    var v1c = Math.sqrt(mu / r1), vd = Math.sqrt(mu * (2 / r1 - 1 / a));
+    var v = Math.sqrt(mu * (2 / r2 - 1 / a)), gamma = Math.atan2(e * Math.sin(nu), 1 + e * Math.cos(nu)), vp = Math.sqrt(mu / r2);
+    return { c3: Math.pow(vd - v1c, 2), tof: tof / 86400, vinf: Math.sqrt(v * v + vp * vp - 2 * v * vp * Math.cos(gamma)) };
+  }
+  // Δv (km/s) to brake from a hyperbolic approach into an orbit hp × ha (altitudes, km).
+  function captureDv(mu, R, vinf, hp, ha) {
+    var rp = R + hp, ra = R + ha, a = (rp + ra) / 2;
+    return Math.sqrt(vinf * vinf + 2 * mu / rp) - Math.sqrt(mu * (2 / rp - 1 / a));
+  }
+
+  /* ---------- destinations (NASA Planetary Fact Sheet values) ---------- */
+  var DEST = {
+    moon: {
+      name: 'Moon', tag: 'Lunar orbiter', level: 1, sunAU: 1.0, mu: 4902.8, R: 1738.1,
+      dMin: 0.3633e6, dMax: 0.4055e6, rSun: K.AU, heater: 40, nominalYears: 1, deadline: 7, budget: 450,
+      blurb: 'Three days away. Signals arrive almost instantly, so this is the place to learn the basics.',
+      real: 'lro',
+      objectives: [
+        { key: 'surf', title: 'Map future landing sites', goal: 10, hint: 'Sharp images and terrain heights. A low orbit matters most.' },
+        { key: 'ice', title: 'Hunt for polar water ice', goal: 10.5, hint: 'Ice hides in permanent shadow. Cameras cannot see it; neutrons and radar can.' },
+        { key: 'env', title: 'Measure radiation for astronauts', goal: 10, hint: 'Particle and field instruments. Small, light and low on data.' }
+      ],
+      traj: [
+        { id: 'direct', name: 'Direct transfer', c3: -2.0, tof: 4.5, vinf: 0.80, dsm: 0, est: false, desc: 'Four and a half days, the route Lunar Reconnaissance Orbiter flew.' },
+        { id: 'lowenergy', name: 'Low-energy transfer', c3: -0.7, tof: 110, vinf: 0.20, dsm: 20, est: true, desc: 'Drift out past the Moon and fall back. Slow, but the braking burn is smaller (GRAIL and CAPSTONE style).' }
+      ],
+      orbits: [
+        { id: 'low', name: 'Low polar, 50 km', hp: 50, ha: 50, sci: { surf: 1.0, ice: 1.0, env: 0.9 }, ecl: 0.8, sk: 150, rad: 1, desc: 'The LRO mapping orbit. Best detail, but lumpy lunar gravity costs 150 m/s of station-keeping every year.' },
+        { id: 'ellip', name: 'Elliptical polar, 50 × 5,000 km', hp: 50, ha: 5000, sci: { surf: 0.65, ice: 0.7, env: 1.0 }, ecl: 1.2, sk: 20, rad: 1, desc: 'Dips low over one pole. Cheaper to reach and to hold.' },
+        { id: 'high', name: 'High circular, 2,000 km', hp: 2000, ha: 2000, sci: { surf: 0.4, ice: 0.35, env: 0.95 }, ecl: 1.5, sk: 5, rad: 1, desc: 'Stable and easy. Too far for sharp imaging.' }
+      ]
+    },
+    venus: {
+      name: 'Venus', tag: 'Cloud-world orbiter', level: 2, sunAU: 108.2e6 / K.AU, mu: 324859, R: 6051.8,
+      dMin: 38.2e6, dMax: 261.0e6, rSun: 108.2e6, heater: 20, nominalYears: 1.5, deadline: 8, budget: 580,
+      blurb: 'Plenty of sunlight, a deep gravity well and clouds no camera can see through.',
+      real: 'magellan',
+      objectives: [
+        { key: 'surf', title: 'See beneath the clouds', goal: 9, hint: 'Only radar reaches the surface. Cameras score nothing here.' },
+        { key: 'atm', title: 'Study the runaway greenhouse', goal: 10.5, hint: 'Spectrometers and a radiometer read the atmosphere at many depths.' },
+        { key: 'int', title: 'Weigh the interior', goal: 9.5, hint: 'Tiny changes in orbit speed reveal the inside. Needs a dish antenna.' }
+      ],
+      orbits: [
+        { id: 'low', name: 'Low circular, 300 km', hp: 300, ha: 300, sci: { surf: 1.0, atm: 0.9, int: 1.0 }, ecl: 0.6, sk: 15, rad: 1.25, desc: 'Best radar and gravity data. The braking burn is enormous, and reflected heat stresses the spacecraft.' },
+        { id: 'ellip', name: 'Elliptical, 295 × 8,460 km', hp: 295, ha: 8460, sci: { surf: 0.75, atm: 1.0, int: 0.7 }, ecl: 0.5, sk: 8, rad: 1.1, desc: 'The orbit Magellan mapped from. Much cheaper to enter.' },
+        { id: 'high', name: '24-hour ellipse, 250 × 66,000 km', hp: 250, ha: 66000, sci: { surf: 0.4, atm: 0.8, int: 0.4 }, ecl: 0.4, sk: 4, rad: 1.0, desc: 'Venus Express style. Long looks at the whole planet, little detail.' }
+      ]
+    },
+    mars: {
+      name: 'Mars', tag: 'Science orbiter', level: 2, sunAU: 227.956e6 / K.AU, mu: 42828, R: 3396.2,
+      dMin: 54.6e6, dMax: 401.4e6, rSun: 227.956e6, heater: 60, nominalYears: 1, deadline: 8, budget: 540,
+      blurb: 'The classic. Launch windows open every 26 months and a command takes 3 to 22 minutes to arrive.',
+      real: 'maven',
+      objectives: [
+        { key: 'atm', title: 'Find where the air went', goal: 11, hint: 'Sample the upper atmosphere directly. An orbit that dips low helps.' },
+        { key: 'surf', title: 'Map the surface in detail', goal: 10, hint: 'High-resolution imaging needs steady pointing and a fast data link.' },
+        { key: 'ice', title: 'Find buried water ice', goal: 10.5, hint: 'Radar and neutron counts see below the dust.' }
+      ],
+      orbits: [
+        { id: 'low', name: 'Low circular, 300 km', hp: 300, ha: 300, sci: { atm: 0.75, surf: 1.0, ice: 1.0 }, ecl: 0.7, sk: 10, rad: 1, desc: 'A mapping orbit like Mars Reconnaissance Orbiter. Costly to enter without aerobraking.' },
+        { id: 'ellip', name: 'Elliptical, 150 × 6,200 km', hp: 150, ha: 6200, sci: { atm: 1.0, surf: 0.6, ice: 0.6 }, ecl: 0.9, sk: 20, rad: 1, desc: 'MAVEN’s science orbit. Each pass skims the upper atmosphere.' },
+        { id: 'high', name: 'Capture ellipse, 380 × 44,600 km', hp: 380, ha: 44600, sci: { atm: 0.55, surf: 0.3, ice: 0.25 }, ecl: 1.4, sk: 5, rad: 1, desc: 'The cheapest way to stay. Far from the planet most of the time.' }
+      ]
+    },
+    bennu: {
+      name: 'Bennu', tag: 'Asteroid rendezvous', level: 3, sunAU: 168e6 / K.AU, mu: 0, R: 0.25,
+      dMin: 60e6, dMax: 340e6, rSun: 168e6, heater: 40, nominalYears: 1.5, deadline: 12, budget: 820,
+      blurb: 'A 500-metre rubble pile with almost no gravity. You do not orbit so much as fly alongside.',
+      real: 'orex',
+      objectives: [
+        { key: 'surf', title: 'Map the whole asteroid', goal: 9.5, hint: 'Cameras and a laser altimeter build the shape model.' },
+        { key: 'comp', title: 'Find carbon and water', goal: 9.5, hint: 'Spectrometers identify minerals from reflected light.' },
+        { key: 'samp', title: 'Bring a sample home', goal: 13.5, hint: 'Needs the sample arm, the touch-and-go plan and fuel for the trip back. Cameras and spectrometers choose the site.' }
+      ],
+      traj: [
+        { id: 'flyby', name: 'Earth-flyby route', c3: 29.3, tof: 815, vinf: 0, dsm: 0, est: false, desc: 'The OSIRIS-REx route: one year around the Sun, an Earth gravity assist, then Bennu.' },
+        { id: 'fast', name: 'Direct high-energy route', c3: 38, tof: 390, vinf: 0, dsm: 400, est: true, desc: 'Skip the flyby. Arrive a year sooner with a bigger rocket bill and a larger rendezvous burn.' }
+      ],
+      orbits: [
+        { id: 'survey', name: 'Stand-off survey, 7 km', fixedDv: 960, sci: { surf: 0.7, comp: 0.75, samp: 0 }, ecl: 0, sk: 10, rad: 1, desc: 'Fly in formation and map from a safe distance.' },
+        { id: 'close', name: 'Close orbit, 1 km', fixedDv: 990, sci: { surf: 1.0, comp: 1.0, samp: 0 }, ecl: 0.3, sk: 25, rad: 1.15, desc: 'The tightest orbit ever flown around a small body. Navigation is delicate.' },
+        { id: 'tag', name: 'Touch-and-go, then return', fixedDv: 1010, ret: 300, retYears: 2.4, sci: { surf: 1.0, comp: 1.0, samp: 1.0 }, ecl: 0.3, sk: 25, rad: 1.3, sample: true, desc: 'Map, descend, touch for five seconds, leave and carry the sample to Earth.' }
+      ]
+    },
+    jupiter: {
+      name: 'Jupiter', tag: 'Outer-planet orbiter', level: 4, sunAU: 778.5e6 / K.AU, mu: 126686534, R: 71492,
+      dMin: 588.5e6, dMax: 968.5e6, rSun: 778.5e6, heater: 150, nominalYears: 1.5, deadline: 13, budget: 900,
+      blurb: 'Sunlight is 27 times weaker, radiation destroys electronics, and every command takes 33 to 54 minutes.',
+      real: 'juno',
+      objectives: [
+        { key: 'atm', title: 'Measure water deep in the atmosphere', goal: 13, hint: 'A microwave radiometer sees hundreds of kilometres below the cloud tops.' },
+        { key: 'env', title: 'Chart the magnetosphere and auroras', goal: 14, hint: 'Fields, particles and ultraviolet views over the poles.' },
+        { key: 'int', title: 'Is there a core?', goal: 9.5, hint: 'Gravity science through the radio link, plus the magnetic field.' }
+      ],
+      orbits: [
+        { id: 'p53', name: '53-day polar orbit', hp: 4200, ha: 8.11e6, sci: { atm: 0.85, env: 0.9, int: 0.85 }, ecl: 0, sk: 10, rad: 2.0, desc: 'Where Juno ended up. Close passes are rare, which limits the radiation dose.' },
+        { id: 'p14', name: '14-day polar orbit', hp: 4200, ha: 3.273e6, sci: { atm: 1.0, env: 1.0, int: 1.0 }, ecl: 0, sk: 10, rad: 3.4, desc: 'Juno’s original plan. Four times the close passes and far more radiation.' },
+        { id: 'far', name: 'Distant 200-day orbit', hp: 643000, ha: 1.9e7, sci: { atm: 0.3, env: 0.7, int: 0.25 }, ecl: 0, sk: 5, rad: 1.15, desc: 'Stays outside the worst radiation belts. Safe, and too far for most measurements.' }
+      ]
+    }
+  };
+
+  // Planetary transfers are computed from the fact-sheet distances (circular, coplanar orbits).
+  (function buildTrajectories() {
+    var H, F;
+    H = hohmann(K.AU, DEST.mars.rSun); F = fastTransfer(K.AU, DEST.mars.rSun, 1.15);
+    DEST.mars.traj = [
+      { id: 'hohmann', name: 'Minimum-energy transfer', c3: H.c3, tof: H.tof, vinf: H.vinf, dsm: 0, est: false, desc: 'Half an ellipse around the Sun. The least fuel for the trip.' },
+      { id: 'fast', name: 'Fast transfer', c3: F.c3, tof: F.tof, vinf: F.vinf, dsm: 0, est: false, desc: 'Leave harder and cross Mars’s orbit early. You arrive sooner and faster, so braking costs more.' }
+    ];
+    H = hohmann(K.AU, DEST.venus.rSun); F = fastTransfer(K.AU, DEST.venus.rSun, 1.12);
+    DEST.venus.traj = [
+      { id: 'hohmann', name: 'Minimum-energy transfer', c3: H.c3, tof: H.tof, vinf: H.vinf, dsm: 0, est: false, desc: 'Fall inward on half an ellipse. Cheapest in fuel.' },
+      { id: 'fast', name: 'Fast transfer', c3: F.c3, tof: F.tof, vinf: F.vinf, dsm: 0, est: false, desc: 'A steeper dive toward the Sun. Weeks shorter, with a harder braking burn.' }
+    ];
+    H = hohmann(K.AU, DEST.jupiter.rSun);
+    DEST.jupiter.traj = [
+      { id: 'ega', name: 'Earth gravity assist', c3: 31.1, tof: 1796, vinf: H.vinf, dsm: 730, est: false, desc: 'Juno’s route: loop out past Mars, burn in deep space, swing past Earth for a free boost. Five years.' },
+      { id: 'hohmann', name: 'Direct transfer', c3: H.c3, tof: H.tof, vinf: H.vinf, dsm: 0, est: false, desc: 'Straight there in under three years. Needs a huge rocket for even a small spacecraft.' }
+    ];
+  })();
+
+  /* ---------- launch vehicles: payload (kg) against launch energy C3 (km²/s²) ---------- */
+  var LV = {
+    rideshare: { name: 'Rideshare slot', price: 22, rel: 0.985, moonOnly: true, pts: [[-2, 1000], [-0.5, 1000]], note: 'Ride along as a secondary payload, as LCROSS did on LRO’s Atlas V. Fuelled mass limit 1,000 kg, Moon only.' },
+    falcon9: { name: 'Falcon 9 (booster recovered)', price: 70, rel: 0.99, pts: [[-2, 3400], [0, 3200], [10, 2500], [20, 1900], [30, 1400], [40, 950], [60, 250], [70, 0]], note: 'Cheapest full rocket. Runs out of energy quickly for distant targets.' },
+    atlas401: { name: 'Atlas V 401', price: 110, rel: 0.985, pts: [[-2, 3150], [0, 3035], [10, 2530], [20, 2090], [30, 1700], [40, 1370], [60, 800], [80, 380], [95, 0]], note: 'Launched MAVEN and LRO.' },
+    atlas411: { name: 'Atlas V 411', price: 125, rel: 0.985, pts: [[-2, 4050], [0, 3900], [10, 3290], [20, 2750], [30, 2280], [40, 1860], [60, 1150], [80, 600], [100, 150], [105, 0]], note: 'One strap-on booster. Launched OSIRIS-REx.' },
+    atlas551: { name: 'Atlas V 551', price: 165, rel: 0.985, pts: [[-2, 6300], [0, 6100], [10, 5270], [20, 4530], [30, 3870], [40, 3280], [60, 2280], [80, 1480], [100, 850], [120, 300], [130, 0]], note: 'Five boosters. Launched Juno.' },
+    fheavy: { name: 'Falcon Heavy (expended)', price: 185, rel: 0.93, pts: [[-2, 15600], [0, 15000], [10, 12300], [20, 10100], [30, 8300], [40, 6700], [60, 4300], [80, 2600], [100, 1400], [120, 500], [135, 0]], note: 'The heavy lifter. Few flights so far, so its record counts for less.' }
+  };
+  function lvCap(id, c3) {
+    var p = LV[id].pts; if (c3 <= p[0][0]) return p[0][1];
+    for (var i = 1; i < p.length; i++) if (c3 <= p[i][0]) { var t = (c3 - p[i - 1][0]) / (p[i][0] - p[i - 1][0]); return p[i - 1][1] + t * (p[i][1] - p[i - 1][1]); }
+    return 0;
+  }
+
+  /* ---------- parts catalogue (masses and power from flown hardware where noted; costs are game estimates) ---------- */
+  var PROP = {
+    mono: { name: 'Hydrazine monopropellant', isp: 225, mass: 45, cost: 18, power: 5, desc: 'One fuel over a catalyst. Simple and dependable. MAVEN and OSIRIS-REx flew this.', risk: 0.9 },
+    biprop: { name: 'Bipropellant', isp: 315, mass: 70, cost: 38, power: 8, desc: 'Fuel plus oxidiser. About 40% more push from each kilogram, with more plumbing to go wrong.', risk: 1.1 },
+    ion: { name: 'Solar-electric ion engine', isp: 3000, mass: 130, cost: 70, power: 2000, lowThrust: true, desc: 'Xenon, electricity and patience. Sips propellant but pushes like a sheet of paper, so every manoeuvre takes months.', risk: 1.0 }
+  };
+  var BATT = {
+    s: { name: 'Small, 500 Wh', wh: 500, mass: 5, cost: 1 },
+    m: { name: 'Medium, 1,500 Wh', wh: 1500, mass: 14, cost: 3 },
+    l: { name: 'Large, 4,000 Wh', wh: 4000, mass: 35, cost: 7 }
+  };
+  var ANT = {
+    lga: { name: 'Low-gain antenna only', d: 0.03, mass: 2, cost: 1, desc: 'Talks in every direction, weakly. Fine near Earth.' },
+    hga1: { name: '1 m dish', d: 1, mass: 9, cost: 6, desc: 'A fixed dish. The spacecraft turns to point it.' },
+    hga2: { name: '2 m dish', d: 2, mass: 22, cost: 12, desc: 'Four times the data rate of the 1 m dish.' },
+    hga3: { name: '3 m dish', d: 3, mass: 38, cost: 22, desc: 'The size Mars Reconnaissance Orbiter carries.' }
+  };
+  var TX = {
+    tx15: { name: '15 W transmitter', pt: 15, dc: 40, mass: 3, cost: 4 },
+    tx35: { name: '35 W transmitter', pt: 35, dc: 85, mass: 5, cost: 8 },
+    tx100: { name: '100 W amplifier', pt: 100, dc: 220, mass: 8, cost: 14 }
+  };
+  var COMP = {
+    basic: { name: 'Single computer', gb: 8, mass: 6, power: 15, cost: 8, fault: 1.8, radTol: 1.0, desc: 'No backup. A single fault can end the mission.' },
+    std: { name: 'Redundant computer', gb: 32, mass: 12, power: 30, cost: 20, fault: 1.0, radTol: 0.85, desc: 'Two computers. If one fails the other takes over.' },
+    rad: { name: 'Radiation-hardened redundant', gb: 128, mass: 18, power: 45, cost: 45, fault: 0.8, radTol: 0.55, desc: 'Built for harsh radiation, with far more storage.' }
+  };
+  var ADCS = {
+    basic: { name: 'Basic pointing', mass: 18, power: 20, cost: 10, precise: false, desc: 'Three reaction wheels and Sun sensors. Good enough for antennas and wide cameras.' },
+    precise: { name: 'Precision pointing', mass: 32, power: 45, cost: 28, precise: true, desc: 'Four wheels and star trackers. Telescopes, radar and lasers need this.' }
+  };
+  var EXTRA = {
+    autonomy: { name: 'Onboard autonomy', mass: 2, power: 10, cost: 18, months: 3, desc: 'Software that diagnoses faults and acts without waiting for Earth. The longer the signal delay, the more it matters.' },
+    vault: { name: 'Radiation vault', mass: 170, power: 0, cost: 28, months: 2, desc: 'A titanium box around the electronics, as on Juno. Heavy, and only worth it in intense radiation.' },
+    compress: { name: 'Data compression software', mass: 0, power: 5, cost: 6, months: 1, desc: 'Shrinks science data by 40% before sending. It rescued Galileo’s mission.' }
+  };
+  // Science value by objective. needs: p = precision pointing, hga = a dish antenna.
+  var INST = {
+    cam: { name: 'Context camera', mass: 4, power: 8, cost: 6, gb: 0.5, v: { surf: 2, atm: 1, comp: 1 }, desc: 'Wide views that place every other measurement in context.' },
+    hires: { name: 'High-resolution camera', mass: 65, power: 60, cost: 45, gb: 6, needs: 'p', v: { surf: 5, ice: 1, comp: 1 }, desc: 'A telescope the size of HiRISE. Stunning detail and a flood of data.' },
+    ir: { name: 'Infrared spectrometer', mass: 20, power: 25, cost: 25, gb: 2, v: { comp: 5, ice: 3, surf: 2, atm: 2 }, desc: 'Reads minerals and ices from the colours our eyes cannot see.' },
+    mag: { name: 'Magnetometer', mass: 3, power: 3, cost: 5, gb: 0.02, v: { env: 4, int: 3, atm: 1 }, desc: 'Measures magnetic fields. Tiny, cheap and nearly data-free.' },
+    ms: { name: 'Mass spectrometer', mass: 12, power: 25, cost: 20, gb: 0.05, v: { atm: 5, comp: 2, env: 1 }, desc: 'Sniffs individual atoms and molecules, like NGIMS on MAVEN.' },
+    radar: { name: 'Imaging radar', mass: 40, power: 150, cost: 60, gb: 8, needs: 'p', v: { ice: 5, surf: 4, int: 1 }, desc: 'Sees through cloud and into the ground. Hungry for power and bandwidth.' },
+    lidar: { name: 'Laser altimeter', mass: 12, power: 35, cost: 18, gb: 0.3, needs: 'p', v: { surf: 3, int: 2, ice: 2 }, desc: 'Fires laser pulses and times the echo to measure terrain height.' },
+    plasma: { name: 'Particle and plasma suite', mass: 10, power: 12, cost: 12, gb: 0.05, v: { env: 5, atm: 3 }, desc: 'Counts charged particles and measures their energy.' },
+    mwr: { name: 'Microwave radiometer', mass: 45, power: 30, cost: 40, gb: 0.1, v: { atm: 5, int: 1 }, desc: 'Listens to heat from deep inside an atmosphere, like Juno’s MWR.' },
+    uv: { name: 'Ultraviolet spectrometer', mass: 8, power: 10, cost: 14, gb: 0.2, v: { atm: 4, env: 3, comp: 1 }, desc: 'Watches upper atmospheres and auroras glow.' },
+    neutron: { name: 'Neutron spectrometer', mass: 25, power: 10, cost: 15, gb: 0.02, v: { ice: 5, comp: 2 }, desc: 'Counts neutrons that hydrogen slows down. The way LRO traced lunar ice.' },
+    grav: { name: 'Gravity science radio', mass: 3, power: 5, cost: 4, gb: 0, needs: 'hga', v: { int: 5 }, desc: 'Tracks tiny shifts in the radio signal as hidden mass tugs the spacecraft.' },
+    tagsam: { name: 'Sample arm and return capsule', mass: 85, power: 40, cost: 95, gb: 0.1, needs: 'p', only: 'bennu', v: { samp: 10, comp: 2 }, desc: 'A touch-and-go collector and a heat-shielded capsule, as on OSIRIS-REx.' }
+  };
+  var SCHED = {
+    fast: { name: 'Fast-track', months: -10, costF: 0.92, test: 1.5, desc: 'Skip some end-to-end tests to save a year. Several lost missions made this choice.' },
+    std: { name: 'Standard test campaign', months: 0, costF: 1.0, test: 1.0, desc: 'The normal balance of schedule and testing.' },
+    ext: { name: 'Extended test campaign', months: 10, costF: 1.09, test: 0.65, desc: 'Test as you fly, twice. Catches the faults that end missions.' }
+  };
+  var REAL = {
+    lro: { name: 'Lunar Reconnaissance Orbiter', year: 2009, wet: 1916, dry: 1018, power: 1850, lv: 'Atlas V 401', cruise: '4.5 days', cost: 504, note: 'Still mapping the Moon from a polar orbit. Its 100 Mbps link returns more data than every other planetary mission combined.' },
+    magellan: { name: 'Magellan', year: 1989, wet: 3449, dry: 1035, power: 1030, lv: 'Space Shuttle + IUS', cruise: '15 months', cost: null, note: 'Mapped 98% of Venus by radar from an elliptical orbit, using a spare Voyager dish.' },
+    maven: { name: 'MAVEN', year: 2013, wet: 2454, dry: 809, power: 1150, lv: 'Atlas V 401', cruise: '10 months', cost: 671, note: 'Showed that the solar wind stripped most of Mars’s atmosphere into space.' },
+    orex: { name: 'OSIRIS-REx', year: 2016, wet: 2110, dry: 880, power: 1226, lv: 'Atlas V 411', cruise: '27 months', cost: 1160, note: 'Delivered 121 grams of asteroid Bennu to Utah in September 2023.' },
+    juno: { name: 'Juno', year: 2011, wet: 3625, dry: 1593, power: 500, lv: 'Atlas V 551', cruise: '5 years', cost: 1130, note: 'The first solar-powered spacecraft at Jupiter. A stuck valve kept it in the 53-day orbit.' }
+  };
+
+  /* ---------- helpers ---------- */
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function marginFactor(m) { return m >= 0.10 ? 1 : m <= 0 ? 3 : 1 + (0.10 - m) / 0.10 * 2; }
+  function mulberry32(seed) { var a = seed >>> 0; return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function linkRate(pt, d, gs70, dist) { var L = K.linkRef; return L.kbps * (pt / L.pt) * Math.pow(d / L.d, 2) * (gs70 ? 4.28 : 1) * Math.pow(L.dist / dist, 2); }
+  function solarPower(area, sunAU) { return K.S0 / (sunAU * sunAU) * area * K.etaSolar; }
+
+  var STARTER = {
+    moon: { objective: 'surf', orbit: 'low', lv: 'falcon9', solarM2: 6, instruments: ['cam', 'lidar'], antenna: 'hga1', tx: 'tx15', adcs: 'precise' },
+    venus: { objective: 'surf', orbit: 'ellip', lv: 'atlas401', solarM2: 6, instruments: ['radar'], antenna: 'hga2', tx: 'tx35', adcs: 'precise', prop: 'biprop' },
+    mars: { objective: 'atm', orbit: 'ellip', lv: 'atlas401', solarM2: 9, instruments: ['ms', 'mag'], antenna: 'hga1', tx: 'tx35', adcs: 'basic' },
+    bennu: { objective: 'surf', orbit: 'survey', lv: 'atlas411', solarM2: 7, instruments: ['cam', 'lidar'], antenna: 'hga2', tx: 'tx35', adcs: 'precise' },
+    jupiter: { objective: 'atm', orbit: 'p53', lv: 'atlas551', solarM2: 62, instruments: ['mwr', 'mag'], antenna: 'hga2', tx: 'tx35', adcs: 'basic', prop: 'biprop', computer: 'std' }
+  };
+  function defaultDesign(destId, mode) {
+    var d = DEST[destId], st = STARTER[destId], k;
+    var base = {
+      dest: destId, objective: d.objectives[0].key, traj: d.traj[0].id, orbit: d.orbits[1].id, years: d.nominalYears,
+      prop: 'mono', propKg: 600, autoFuel: true, solarM2: 8, rtg: 0, battery: 'm',
+      antenna: 'hga1', tx: 'tx35', dsn: '34', hours: 8, computer: 'std', adcs: 'basic',
+      extras: {}, instruments: ['cam'], lv: 'atlas401', schedule: 'std'
+    };
+    for (k in st) base[k] = Array.isArray(st[k]) ? st[k].slice() : st[k];
+    if (mode === 'engineer') { var ev = evaluate(base, { mode: 'engineer' }); base.propKg = Math.min(ev.propKg, 6000); base.autoFuel = false; }
+    return base;
+  }
+
+  /* ---------- the model ---------- */
+  function evaluate(D, opts) {
+    opts = opts || {};
+    var d = DEST[D.dest], cadet = opts.mode !== 'engineer', sandbox = !!opts.sandbox;
+    var tr = d.traj.filter(function (t) { return t.id === D.traj; })[0] || d.traj[0];
+    var orb = d.orbits.filter(function (o) { return o.id === D.orbit; })[0] || d.orbits[0];
+    var obj = d.objectives.filter(function (o) { return o.key === D.objective; })[0] || d.objectives[0];
+    var P = PROP[D.prop], A = ANT[D.antenna], T = TX[D.tx], C = COMP[D.computer], G = ADCS[D.adcs], B = BATT[D.battery], S = SCHED[D.schedule], lv = LV[D.lv];
+    var ex = D.extras || {}, insts = (D.instruments || []).filter(function (i) { return INST[i] && (!INST[i].only || INST[i].only === D.dest); });
+    var years = D.years, issues = [];
+    function issue(level, area, title, why, fix) { issues.push({ level: level, area: area, title: title, why: why, fix: fix }); }
+
+    /* Δv budget */
+    var capture = orb.fixedDv != null ? orb.fixedDv : captureDv(d.mu, d.R, tr.vinf, orb.hp, orb.ha) * 1000;
+    var dv = { tcm: K.tcm, dsm: tr.dsm, capture: capture, sk: orb.sk * years, ret: orb.ret || 0 };
+    var lowF = P.lowThrust ? 1.8 : 1;
+    dv.total = (dv.tcm + dv.dsm + dv.capture + dv.sk + dv.ret) * lowF;
+    dv.lowF = lowF;
+
+    /* mass */
+    var instMass = insts.reduce(function (s, i) { return s + INST[i].mass; }, 0);
+    var solarMass = D.solarM2 * 3.5, rtgMass = D.rtg * 45;
+    var hw = P.mass + solarMass + rtgMass + B.mass + A.mass + T.mass + C.mass + G.mass + 85 + instMass;
+    Object.keys(EXTRA).forEach(function (k) { if (ex[k]) hw += EXTRA[k].mass; });
+    var structure = hw * 0.22;
+    var dryNoTank = (hw + structure) * (1 + K.growth);
+    var tankK = K.tankFrac * (1 + K.growth), ve = P.isp * K.g0;
+    var propKg = D.propKg, autoTarget = 0.15;
+    if (D.autoFuel) {
+      var k = Math.exp(dv.total * (1 + autoTarget) / ve) - 1;
+      propKg = tankK * k >= 0.95 ? 99999 : Math.ceil(dryNoTank * k / (1 - tankK * k) / 10) * 10;
+    }
+    var dry = dryNoTank + tankK * propKg, wet = dry + propKg;
+    var dvAvail = ve * Math.log(wet / dry);
+    var dvMargin = dv.total > 0 ? dvAvail / dv.total - 1 : 1;
+    var cap = lvCap(D.lv, tr.c3);
+    var massMargin = cap > 0 ? (cap - wet) / cap : -1;
+
+    /* power */
+    var pSolar = solarPower(D.solarM2, d.sunAU), rtgYears = tr.tof / 365.25 + years;
+    var pRtg = D.rtg * 110 * Math.pow(0.975, rtgYears);
+    var pGen = pSolar + pRtg;
+    var instPower = insts.reduce(function (s, i) { return s + INST[i].power; }, 0);
+    var extraPower = Object.keys(EXTRA).reduce(function (s, k) { return s + (ex[k] ? EXTRA[k].power : 0); }, 0);
+    var pBus = 180 + d.heater + C.power + G.power + (P.lowThrust ? 0 : P.power) + extraPower;
+    var pLoad = pBus + T.dc + instPower;
+    var powerMargin = pLoad > 0 ? pGen / pLoad - 1 : 1;
+    var ionOK = !P.lowThrust || pGen >= P.power + pBus;
+    var eclNeed = Math.max(0, pBus - pRtg) * orb.ecl, eclHave = B.wh * K.dod;
+    var eclOK = eclNeed <= eclHave + 1e-6;
+
+    /* communications and data */
+    var dTyp = (d.dMin + d.dMax) / 2, rateCap = D.dest === 'moon' ? 100000 : 6000;
+    var gs70 = D.dsn === '70';
+    var rate = Math.min(rateCap, linkRate(T.pt, A.d, gs70, dTyp));
+    var rateWorst = Math.min(rateCap, linkRate(T.pt, A.d, gs70, d.dMax));
+    var downGB = rate * 3600 * D.hours / 8e6;
+    var genGB = insts.reduce(function (s, i) { return s + INST[i].gb; }, 0) * (ex.compress ? 0.6 : 1);
+    var dataFrac = genGB > 0 ? clamp(downGB / genGB, 0, 1) : 1;
+    var storageDays = genGB > 0 ? C.gb / genGB : 99;
+    var owlt = { min: d.dMin / K.c, max: d.dMax / K.c };
+
+    /* science */
+    var others = d.objectives.filter(function (o) { return o.key !== obj.key; }).map(function (o) { return o.key; });
+    var sciItems = insts.map(function (id) {
+      var I = INST[id], pts = (I.v[obj.key] || 0) + 0.3 * others.reduce(function (s, kx) { return s + (I.v[kx] || 0); }, 0), note = '';
+      if (D.dest === 'venus' && (id === 'cam' || id === 'hires' || id === 'lidar' || id === 'neutron')) { pts *= (id === 'cam' ? 0.5 : 0.1); note = 'Venus’s clouds block it'; }
+      if (D.dest === 'venus' && id === 'radar') { pts *= 1.4; note = 'radar is the only way to the surface'; }
+      if (id === 'mwr' && D.dest !== 'jupiter' && D.dest !== 'venus') { pts *= 0.3; note = 'needs a deep atmosphere'; }
+      if (id === 'neutron' && (D.dest === 'jupiter' || D.dest === 'bennu')) { pts *= 0.3; note = 'little to detect from this orbit'; }
+      if (I.needs === 'p' && !G.precise) { pts *= 0.4; note = 'blurred without precision pointing'; }
+      if (I.needs === 'hga' && A.d < 1) { pts *= 0.2; note = 'needs a dish antenna'; }
+      if (id === 'tagsam' && !orb.sample) { pts *= 0.15; note = 'no touch-and-go in this plan'; }
+      return { id: id, pts: pts, note: note };
+    });
+    var sciRaw = sciItems.reduce(function (s, x) { return s + x.pts; }, 0);
+    var orbF = orb.sci[obj.key] != null ? orb.sci[obj.key] : 0.6;
+    if (obj.key === 'samp' && !orb.sample) orbF = 0.1;
+    var durF = clamp((1 - Math.exp(-years / 1.2)) / (1 - Math.exp(-d.nominalYears / 1.2)), 0, 1.25);
+    var sciPct = sciRaw * orbF * dataFrac * durF / obj.goal;
+
+    /* development time and cost ($M) */
+    var devMonths = 42 + 2.5 * insts.length + (P.lowThrust ? 6 : 0) + (D.rtg > 0 ? 10 : 0) + (orb.sample ? 8 : 0) + S.months;
+    Object.keys(EXTRA).forEach(function (kx) { if (ex[kx]) devMonths += EXTRA[kx].months; });
+    var cruiseDays = tr.tof * (P.lowThrust ? 1.5 : 1) + (P.lowThrust ? 200 : 0);
+    var retYears = orb.retYears || 0;
+    var timeline = devMonths / 12 + cruiseDays / 365.25 + years + retYears;
+    var instCost = insts.reduce(function (s, i) { return s + INST[i].cost; }, 0);
+    var extraCost = Object.keys(EXTRA).reduce(function (s, kx) { return s + (ex[kx] ? EXTRA[kx].cost : 0); }, 0);
+    var busCost = 35 + 0.04 * dry + P.cost + (D.solarM2 > 0 ? 4 + 0.7 * D.solarM2 : 0) + D.rtg * 80 + (D.rtg > 0 ? 25 : 0) + B.cost + A.cost + T.cost + C.cost + G.cost + extraCost;
+    var wraps = (busCost + instCost) * 0.60 * S.costF;
+    var dsnHourly = K.dsnRate * (gs70 ? 4 : 1) * 1.6 / 1e6; // $M per contact hour, 7 contacts a week
+    var opsCost = (cruiseDays / 365.25) * (8 + 2 * 365 * K.dsnRate * 1.6 / 1e6) + (years + retYears * 0.4) * (16 + D.hours * 365 * dsnHourly);
+    var cost = { bus: busCost, payload: instCost, wraps: wraps, launch: lv.price, ops: opsCost };
+    cost.total = cost.bus + cost.payload + cost.wraps + cost.launch + cost.ops;
+    var budget = d.budget * (cadet ? 1.2 : 1);
+
+    /* risk */
+    var owltMin = dTyp / K.c / 60;
+    var radF = 1 + (orb.rad - 1) * (ex.vault ? 0.35 : 1) * C.radTol;
+    var risk = {};
+    risk.launch = 1 - lv.rel;
+    risk.cruise = clamp((0.02 * C.fault * S.test * P.risk + 0.004 * Math.max(0, cruiseDays / 365.25 - 1)) * (ex.autonomy ? 0.7 : 1), 0, 0.9);
+    risk.arrival = clamp((P.lowThrust ? 0.02 : 0.04) * marginFactor(dvMargin) * S.test * (owltMin > 5 && !ex.autonomy ? 1.4 : 1) * (orb.sample ? 1.3 : 1), 0, 0.95);
+    risk.opsPerYear = clamp(0.02 * marginFactor(powerMargin) * radF * C.fault * (eclOK ? 1 : 2.2), 0, 0.9);
+    risk.ops = 1 - Math.pow(1 - risk.opsPerYear, years);
+    risk.sample = orb.sample ? clamp(0.04 * S.test, 0, 0.5) : 0;
+    risk.success = (1 - risk.launch) * (1 - risk.cruise) * (1 - risk.arrival) * (1 - risk.ops) * (1 - risk.sample);
+
+    /* issues, each with the reason and a way out */
+    var needLv = lv.moonOnly && D.dest !== 'moon';
+    if (needLv) issue('block', 'launch', 'A rideshare slot only reaches the Moon', 'Secondary payloads go wherever the main passenger is going.', 'Choose a dedicated rocket.');
+    else if (!sandbox && massMargin < 0) issue('block', 'mass', 'Too heavy for ' + lv.name, 'Fuelled, the spacecraft is ' + fmt(wet) + ' kg. This rocket can throw ' + fmt(cap) + ' kg onto the chosen route (C3 ' + tr.c3.toFixed(1) + ').', 'Remove mass, pick a gentler route or orbit, or buy a bigger rocket.');
+    else if (!sandbox && massMargin < 0.05) issue('warn', 'mass', 'Almost no mass margin', 'Spacecraft always gain weight during design. With under 5% spare, the first surprise forces a redesign.', 'Aim for 10% or more.');
+    if (propKg >= 99999) issue('block', 'dv', 'No amount of fuel is enough', 'Each extra kilogram of fuel needs fuel to carry it. With this engine the spiral never closes.', 'Use a more efficient engine, or a cheaper route and orbit.');
+    else if (dvMargin < 0) issue('block', 'dv', 'Not enough fuel to finish the mission', 'The plan needs ' + fmt(dv.total) + ' m/s of velocity change and the tanks provide ' + fmt(dvAvail) + ' m/s.', D.autoFuel ? 'Lighten the spacecraft.' : 'Load more propellant, switch engine, or choose an orbit that is cheaper to enter.');
+    else if (dvMargin < 0.10) issue('warn', 'dv', 'Thin fuel margin', 'Under 10% spare, a slightly long burn or an extra correction can strand the spacecraft. Risk at arrival rises steeply.', 'Add propellant.');
+    else if (dvMargin > 0.6 && !D.autoFuel) issue('info', 'dv', 'You are hauling spare fuel', 'A margin above 60% is mass and money that could have been science.', 'Offload some propellant.');
+    if (P.lowThrust && D.dest === 'jupiter') issue('block', 'power', 'Ion engines starve at Jupiter', 'Sunlight there is 3.7% of what it is at Earth, far too weak to run a 2 kW thruster.', 'Use a chemical engine.');
+    else if (!ionOK) issue('block', 'power', 'Not enough power to run the ion engine', 'The thruster draws 2,000 W on top of the spacecraft’s own ' + fmt(pBus) + ' W.', 'Add solar array area or switch to a chemical engine.');
+    if (powerMargin < 0) issue('block', 'power', 'Power demand exceeds supply', 'Everything on at once draws ' + fmt(pLoad) + ' W. The spacecraft makes ' + fmt(pGen) + ' W at ' + d.name + ', where sunlight is ' + Math.round(100 / (d.sunAU * d.sunAU)) + '% of Earth’s.', 'Add array area or an RTG, or remove power-hungry parts.');
+    else if (powerMargin < 0.10) issue('warn', 'power', 'Thin power margin', 'Arrays degrade and dust, pointing and seasons all cut output. Under 10% spare the spacecraft will brown out.', 'Add generation.');
+    if (!eclOK) issue('warn', 'power', 'Battery too small for the shadow', 'Each orbit spends about ' + orb.ecl + ' h in darkness. Keeping the core systems alive needs ' + fmt(eclNeed) + ' Wh and the battery can safely give ' + fmt(eclHave) + ' Wh.', 'Fit a larger battery or add an RTG.');
+    if (D.solarM2 === 0 && D.rtg === 0) issue('block', 'power', 'No power source', 'Nothing generates electricity.', 'Add solar arrays or an RTG.');
+    if (genGB > 0 && dataFrac < 0.5) issue('warn', 'data', 'Most of the science never reaches Earth', 'Instruments record ' + genGB.toFixed(1) + ' GB a day. The link can return ' + downGB.toFixed(2) + ' GB a day, so ' + Math.round((1 - dataFrac) * 100) + '% is overwritten before it is sent.', 'Bigger dish, stronger transmitter, 70 m stations, more contact hours, or compression.');
+    else if (genGB > 0 && dataFrac < 0.95) issue('warn', 'data', 'The downlink is a bottleneck', Math.round((1 - dataFrac) * 100) + '% of recorded data cannot be returned.', 'Improve the link or trim the heaviest data producers.');
+    if (genGB > 0 && storageDays < 1) issue('warn', 'data', 'Storage fills in under a day', 'The recorder holds ' + C.gb + ' GB and the payload writes ' + genGB.toFixed(1) + ' GB a day. Any missed pass loses data.', 'Fit a computer with more storage.');
+    if (!insts.length) issue('block', 'science', 'No instruments on board', 'A spacecraft with nothing to measure returns no science.', 'Add at least one instrument.');
+    if (obj.key === 'samp' && (!orb.sample || insts.indexOf('tagsam') < 0)) issue('block', 'science', 'Sample return needs the arm and the plan', 'The objective is to bring material home. That takes the sample arm and the touch-and-go orbit plan together.', 'Select both.');
+    sciItems.forEach(function (x) { if (x.note && x.pts < 1.2 && INST[x.id].cost >= 12) issue('info', 'science', INST[x.id].name + ' is wasted here', 'It is returning little because: ' + x.note + '.', 'Fix the cause or remove it and spend the mass elsewhere.'); });
+    if (!sandbox && cost.total > budget) issue('block', 'budget', 'Over budget by $' + fmt(cost.total - budget) + 'M', 'The cost cap for this mission class is $' + fmt(budget) + 'M including launch and operations.', 'Cut the most expensive items or shorten operations.');
+    if (timeline > d.deadline + (orb.sample ? 2 : 0)) issue('warn', 'time', 'Past the programme deadline', 'Development, cruise and operations add up to ' + timeline.toFixed(1) + ' years. The programme expects results within ' + (d.deadline + (orb.sample ? 2 : 0)) + '.', 'Shorten the route, the test campaign or the science phase.');
+    if (orb.rad > 1.5 && !ex.vault && C.radTol > 0.6) issue('warn', 'risk', 'Electronics are exposed to intense radiation', 'In this orbit an unprotected computer absorbs a lethal dose within months.', 'Add the radiation vault, a hardened computer, or pick a gentler orbit.');
+    if (owltMin > 5 && !ex.autonomy) issue('info', 'risk', 'Earth cannot help in time', 'A command takes about ' + Math.round(owltMin) + ' minutes to arrive. Without onboard autonomy the spacecraft waits for instructions while a fault develops.', 'Consider the autonomy package.');
+    if (S.test > 1) issue('info', 'risk', 'Fast-track raises risk in every phase', 'Skipped tests are how unit mix-ups and upside-down sensors reach the launch pad.', 'Use the standard campaign if the schedule allows.');
+    if (lowF > 1 && D.dest !== 'jupiter') issue('info', 'dv', 'Low thrust needs more velocity change', 'An ion engine cannot brake in one burn. It spirals, which costs about 1.8 times the Δv and adds months.', 'This is the price of its fuel economy.');
+
+    var blocked = issues.some(function (i) { return i.level === 'block'; });
+    var deadline = d.deadline + (orb.sample ? 2 : 0);
+    var reqs = [
+      { id: 'sci', label: 'Science return reaches the objective', ok: sciPct >= 1, value: Math.round(sciPct * 100) + '%' },
+      { id: 'mass', label: 'Fits the launch vehicle with 10% to spare', ok: sandbox || massMargin >= 0.10, value: Math.round(massMargin * 100) + '%' },
+      { id: 'dv', label: 'Fuel margin of 10% or more', ok: dvMargin >= 0.10, value: Math.round(dvMargin * 100) + '%' },
+      { id: 'power', label: 'Power margin of 10% or more', ok: powerMargin >= 0.10 && eclOK, value: Math.round(powerMargin * 100) + '%' },
+      { id: 'data', label: 'At least 95% of data returned', ok: dataFrac >= 0.95, value: Math.round(dataFrac * 100) + '%' },
+      { id: 'budget', label: 'Within the cost cap', ok: sandbox || cost.total <= budget, value: '$' + fmt(cost.total) + 'M' },
+      { id: 'time', label: 'Results before the deadline', ok: timeline <= deadline, value: timeline.toFixed(1) + ' yr' },
+      { id: 'risk', label: 'Chance of success above 80%', ok: risk.success >= 0.80, value: Math.round(risk.success * 100) + '%' }
+    ];
+
+    return {
+      d: d, tr: tr, orb: orb, obj: obj, lv: lv, insts: insts, years: years,
+      dv: dv, isp: P.isp, propKg: propKg, dry: dry, wet: wet, dvAvail: dvAvail, dvMargin: dvMargin, cap: cap, massMargin: massMargin,
+      massParts: { payload: instMass, bus: hw - instMass, structure: structure, growth: (hw + structure) * K.growth, tanks: tankK * propKg, prop: propKg },
+      pSolar: pSolar, pRtg: pRtg, pGen: pGen, pLoad: pLoad, pBus: pBus, powerMargin: powerMargin, eclOK: eclOK, eclNeed: eclNeed, eclHave: eclHave,
+      rate: rate, rateWorst: rateWorst, downGB: downGB, genGB: genGB, dataFrac: dataFrac, storageGB: C.gb, storageDays: storageDays, owlt: owlt, owltMin: owltMin,
+      sciItems: sciItems, sciRaw: sciRaw, orbF: orbF, durF: durF, sciPct: sciPct,
+      devMonths: devMonths, cruiseDays: cruiseDays, retYears: retYears, timeline: timeline, deadline: deadline,
+      cost: cost, budget: budget, risk: risk, radF: radF, issues: issues, blocked: blocked, reqs: reqs, sandbox: sandbox, cadet: cadet
+    };
+  }
+  function fmt(x) { return Math.round(x).toLocaleString('en-US'); }
+
+  /* Monte Carlo: where do 500 virtual flights of this design end? */
+  function monteCarlo(ev, n, seed) {
+    var rng = mulberry32(seed || 2026), out = [], tally = { ok: 0, launch: 0, cruise: 0, arrival: 0, ops: 0, sample: 0 };
+    for (var i = 0; i < n; i++) {
+      var r = rng() < ev.risk.launch ? 'launch' : rng() < ev.risk.cruise ? 'cruise' : rng() < ev.risk.arrival ? 'arrival' : rng() < ev.risk.ops ? 'ops' : rng() < ev.risk.sample ? 'sample' : 'ok';
+      out.push(r); tally[r]++;
+    }
+    return { runs: out, tally: tally };
+  }
+
+  /* ---------- scoring ---------- */
+  function bandScore(m) { return m < 0 ? 0 : m < 0.10 ? m / 0.10 : m <= 0.35 ? 1 : Math.max(0.6, 1 - (m - 0.35) * 0.6); }
+  function score(ev, flight) {
+    var f = flight || { survived: true, sciMult: 1, opsFrac: 1, crisisGrades: [], extraCost: 0 };
+    var sciAchieved = f.reachedOps ? ev.sciPct * f.sciMult * f.opsFrac : 0;
+    if (!flight) sciAchieved = ev.sciPct;
+    var parts = {};
+    parts.science = 400 * clamp(sciAchieved, 0, 1.25) / 1.25;
+    parts.reliability = 150 * clamp((ev.risk.success - 0.6) / 0.35, 0, 1);
+    var cost = ev.cost.total + (f.extraCost || 0);
+    parts.budget = ev.sandbox ? 75 : cost <= ev.budget ? 100 + 50 * clamp((ev.budget - cost) / ev.budget / 0.15, 0, 1) : Math.max(0, 100 - (cost / ev.budget - 1) * 500);
+    parts.margins = 37.5 * (bandScore(ev.massMargin) + bandScore(ev.dvMargin) + bandScore(ev.powerMargin) + clamp(ev.dataFrac, 0, 1));
+    parts.schedule = 50 * clamp(1 - (ev.timeline + (f.extraYears || 0) - ev.deadline) / 3, 0, 1);
+    var g = f.crisisGrades || [];
+    parts.crisis = g.length ? g.reduce(function (s, x) { return s + x; }, 0) / g.length : (flight ? 70 : 0);
+    var total = Math.round(parts.science + parts.reliability + parts.budget + parts.margins + parts.schedule + parts.crisis);
+    var outcome = !flight ? 'forecast' : (f.survived && sciAchieved >= 0.7) ? 'success' : (f.reachedOps && sciAchieved >= 0.3) ? 'partial' : 'failure';
+    var stars = total >= 880 ? 5 : total >= 760 ? 4 : total >= 620 ? 3 : total >= 450 ? 2 : 1;
+    return { total: total, parts: parts, sciAchieved: sciAchieved, outcome: outcome, stars: stars, cost: cost,
+      max: { science: 400, reliability: 150, budget: 150, margins: 150, schedule: 50, crisis: 100 } };
+  }
+
+  /* ---------- team roles and their department goals ---------- */
+  var ROLES = [
+    { id: 'pi', name: 'Principal Investigator', short: 'SCI', owns: ['objective', 'payload'], goal: 'Science return of 110% or more', test: function (ev) { return ev.sciPct >= 1.10; } },
+    { id: 'se', name: 'Systems Engineer', short: 'SYS', owns: ['spacecraft'], goal: 'Mass, fuel and power margins all at 15% or more', test: function (ev) { return ev.massMargin >= 0.15 && ev.dvMargin >= 0.15 && ev.powerMargin >= 0.15; } },
+    { id: 'fd', name: 'Flight Director', short: 'FLT', owns: ['route', 'launch'], goal: 'Chance of success of 88% or more', test: function (ev) { return ev.risk.success >= 0.88; } },
+    { id: 'ops', name: 'Ground and Budget Lead', short: 'GND', owns: ['comms'], goal: 'Finish 8% or more under the cost cap, with all data returned', test: function (ev) { return ev.cost.total <= ev.budget * 0.92 && ev.dataFrac >= 0.99; } }
+  ];
+
+  var api = { K: K, DEST: DEST, LV: LV, PROP: PROP, BATT: BATT, ANT: ANT, TX: TX, COMP: COMP, ADCS: ADCS, EXTRA: EXTRA, INST: INST, SCHED: SCHED, REAL: REAL, ROLES: ROLES,
+    hohmann: hohmann, fastTransfer: fastTransfer, captureDv: captureDv, lvCap: lvCap, linkRate: linkRate, solarPower: solarPower,
+    defaultDesign: defaultDesign, evaluate: evaluate, monteCarlo: monteCarlo, score: score, mulberry32: mulberry32, clamp: clamp, fmt: fmt, marginFactor: marginFactor };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SD = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Signal Delay — interface: home, design console, review. Flight and debrief live in flight.js. */
+(function () {
+  'use strict';
+  var E = window.SD, fmt = E.fmt;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var app = $('#app');
+
+  /* ---------- state ---------- */
+  var S = { screen: 'home', mode: 'cadet', sandbox: false, players: [''], team: '', design: null, step: 0, go: {}, history: [], result: null, modal: null, toast: '' };
+  var UI = window.SDUI = { S: S, E: E };
+  function persist() { try { localStorage.setItem('signal-delay', JSON.stringify({ mode: S.mode, sandbox: S.sandbox, players: S.players, team: S.team, design: S.design, step: S.step, history: S.history })); } catch (e) { /* storage is optional */ } }
+  function restore(snap) {
+    var o = snap; if (!o || !o.mode) { try { o = JSON.parse(localStorage.getItem('signal-delay') || 'null'); } catch (e) { o = null; } }
+    if (!o) return;
+    ['mode', 'sandbox', 'players', 'team', 'design', 'step', 'history'].forEach(function (k) { if (o[k] != null) S[k] = o[k]; });
+    if (!Array.isArray(S.players) || !S.players.length) S.players = [''];
+    if (o.screen === 'design' && S.design) S.screen = 'design';
+  }
+  function board() { try { return JSON.parse(localStorage.getItem('signal-delay-board') || '[]'); } catch (e) { return []; } }
+  function boardAdd(row) { var b = board(); b.push(row); b.sort(function (x, y) { return y.score - x.score; }); b = b.slice(0, 12); try { localStorage.setItem('signal-delay-board', JSON.stringify(b)); } catch (e) { /* optional */ } return b; }
+  UI.board = board; UI.boardAdd = boardAdd; UI.persist = persist;
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function dur(sec) { if (sec < 90) return sec.toFixed(sec < 10 ? 2 : 0) + ' s'; var m = Math.floor(sec / 60), s = Math.round(sec % 60); if (s === 60) { m++; s = 0; } return m + ' min ' + (s < 10 ? '0' : '') + s + ' s'; }
+  function days(d) { return d < 60 ? d.toFixed(d < 10 ? 1 : 0) + ' days' : d < 730 ? Math.round(d / 30.44) + ' months' : (d / 365.25).toFixed(1) + ' years'; }
+  function pct(x) { return Math.round(x * 100) + '%'; }
+  function sunPct(d) { var v = 100 / (d.sunAU * d.sunAU); return v < 10 ? v.toFixed(1) : Math.round(v); }
+  function ev() { return E.evaluate(S.design, { mode: S.mode, sandbox: S.sandbox }); }
+  function playerName(i) { var n = S.players[i % S.players.length]; return n && n.trim() ? n.trim() : 'Player ' + (i % S.players.length + 1); }
+  function roleOf(id) { for (var i = 0; i < E.ROLES.length; i++) if (E.ROLES[i].id === id) return i; return -1; }
+  UI.esc = esc; UI.dur = dur; UI.days = days; UI.pct = pct; UI.playerName = playerName;
+
+  var STEPS = [
+    { id: 'objective', title: 'Objective', seg: 'User segment', role: 'pi', cml: 'CML 1 · Cocktail napkin', why: 'Every mission starts from a question. The objective decides which instruments earn their place, which orbit suits them and how much data must come home.' },
+    { id: 'route', title: 'Route and orbit', seg: 'Mission design', role: 'fd', cml: 'CML 2 · Initial feasibility', why: 'How you travel sets the launch energy the rocket must supply and the speed you arrive with. The orbit sets the braking burn and how well the instruments can see.' },
+    { id: 'spacecraft', title: 'Spacecraft', seg: 'Space segment', role: 'se', cml: 'CML 3 · Trade space', why: 'The bus keeps the instruments alive: it pushes, powers, points and thinks. Every kilogram here needs fuel to move it, and that fuel needs a bigger rocket.' },
+    { id: 'payload', title: 'Instruments', seg: 'Space segment', role: 'pi', cml: 'CML 3 · Trade space', why: 'Instruments are why the mission exists. Each one adds science, and also mass, power draw, cost and data that has to be sent home.' },
+    { id: 'comms', title: 'Comms and ground', seg: 'Ground segment', role: 'ops', cml: 'CML 3 · Trade space', why: 'Radio signals spread out as they travel, so the data rate falls with the square of the distance. Twice as far means a quarter of the data.' },
+    { id: 'launch', title: 'Launch', seg: 'Launch segment', role: 'fd', cml: 'CML 3 · Trade space', why: 'The rocket must throw the whole fuelled spacecraft onto the chosen route. The more launch energy the route needs, the less mass the rocket can carry.' },
+    { id: 'review', title: 'Review and launch', seg: 'Go / no-go', role: null, cml: 'CML 4 · Point design', why: 'A design is ready when every requirement closes with margin. See what is still open, watch how 500 simulated flights end, then poll the team.' }
+  ];
+  var AREA_STEP = { mass: 5, dv: 5, launch: 5, power: 2, data: 4, science: 3, budget: 6, time: 1, risk: 2 };
+  var PLANET = { moon: 'radial-gradient(circle at 35% 30%, #F4F8FF, #9DB2CF 70%)', venus: 'radial-gradient(circle at 35% 30%, #FFE0B8, #D49B6A 70%)', mars: 'radial-gradient(circle at 35% 30%, #FFB45C, #C0562B 75%)', bennu: 'radial-gradient(circle at 35% 30%, #7C8CA6, #2B3A52 75%)', jupiter: 'repeating-linear-gradient(8deg, #D49B6A 0 7px, #F3D3A8 7px 12px, #C68B59 12px 18px)' };
+  UI.STEPS = STEPS; UI.PLANET = PLANET;
+
+  /* ---------- Echo, the flight mentor (original character) ---------- */
+  function echo(mood) {
+    var mouth = mood === 'happy' ? '<path d="M24 37 q6 6 12 0" fill="none" stroke="#0B1D3A" stroke-width="2" stroke-linecap="round"/>' : mood === 'sad' ? '<path d="M24 40 q6 -5 12 0" fill="none" stroke="#0B1D3A" stroke-width="2" stroke-linecap="round"/>' : mood === 'worried' ? '<path d="M25 39 h10" stroke="#0B1D3A" stroke-width="2" stroke-linecap="round"/><path d="M45 20 q3 5 0 7 q-3 -2 0 -7" fill="#00D2FF"/>' : '<path d="M25 38 q5 3 10 0" fill="none" stroke="#0B1D3A" stroke-width="2" stroke-linecap="round"/>';
+    var brows = mood === 'worried' || mood === 'sad' ? '<path d="M21 25 l6 -2 M39 25 l-6 -2" stroke="#0B1D3A" stroke-width="1.6" stroke-linecap="round"/>' : '';
+    return '<svg viewBox="0 0 60 60" role="img" aria-label="Echo, the flight mentor"><circle cx="30" cy="30" r="29" fill="#EAF4FF"/><path d="M12 60 q2 -14 18 -14 q16 0 18 14 z" fill="#0B1D3A"/><path d="M26 47 h8 v4 h-8 z" fill="#00D2FF"/><rect x="26" y="40" width="8" height="8" fill="#C68B59"/><circle cx="30" cy="30" r="14" fill="#D49B6A"/><path d="M16 29 q0 -16 14 -16 q14 0 14 16 q-4 -9 -14 -9 q-10 0 -14 9 z" fill="#0B1D3A"/><path d="M15 31 q0 -19 15 -19 q15 0 15 19" fill="none" stroke="#00D2FF" stroke-width="2.4"/><rect x="12" y="27" width="5" height="9" rx="2" fill="#0099FF"/><rect x="43" y="27" width="5" height="9" rx="2" fill="#0099FF"/><path d="M14 36 q2 8 11 6" fill="none" stroke="#0B1D3A" stroke-width="1.6"/><circle cx="25" cy="42" r="1.8" fill="#FF9900"/><circle cx="25" cy="30" r="1.9" fill="#0B1D3A"/><circle cx="35" cy="30" r="1.9" fill="#0B1D3A"/>' + brows + mouth + '</svg>';
+  }
+  UI.echo = echo;
+
+  /* ---------- spacecraft drawing that follows the design ---------- */
+  function craftSVG(D, e) {
+    var wing = D.solarM2 > 0 ? Math.min(118, 14 + Math.sqrt(D.solarM2) * 13) : 0, tank = Math.min(46, 8 + Math.sqrt(e.propKg) * 0.75);
+    var dish = E.ANT[D.antenna].d, bx = 132, by = 78 - tank / 2, bw = 56, bh = 44 + tank;
+    var s = '<svg viewBox="0 0 320 200" role="img" aria-label="Your spacecraft: ' + fmt(e.wet) + ' kilograms fuelled">';
+    s += '<defs><linearGradient id="pv" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0099FF"/><stop offset="1" stop-color="#0B3A7A"/></linearGradient></defs>';
+    if (wing) {
+      [-1, 1].forEach(function (dir) {
+        var x0 = dir < 0 ? bx - 6 - wing : bx + bw + 6, n = Math.max(2, Math.round(wing / 20));
+        s += '<line x1="' + (dir < 0 ? bx : bx + bw) + '" y1="100" x2="' + (dir < 0 ? bx - 6 : bx + bw + 6) + '" y2="100" stroke="#9DB2CF" stroke-width="2"/>';
+        s += '<rect x="' + x0 + '" y="84" width="' + wing + '" height="32" fill="url(#pv)" stroke="#00D2FF" stroke-width="1"/>';
+        for (var i = 1; i < n; i++) s += '<line x1="' + (x0 + wing * i / n) + '" y1="84" x2="' + (x0 + wing * i / n) + '" y2="116" stroke="#00D2FF" stroke-width=".6" opacity=".6"/>';
+      });
+    }
+    for (var r = 0; r < D.rtg && r < 6; r++) { var ry = by + 8 + r * 12; s += '<line x1="' + (bx + bw) + '" y1="' + (ry + 3) + '" x2="' + (bx + bw + 16) + '" y2="' + (ry + 3) + '" stroke="#9DB2CF" stroke-width="1.5"/><rect x="' + (bx + bw + 16) + '" y="' + ry + '" width="22" height="7" rx="2" fill="#FF9900" stroke="#FFAE00"/>'; }
+    // engine
+    var ny = by + bh;
+    if (D.prop === 'ion') s += '<rect x="150" y="' + ny + '" width="20" height="8" fill="#9DB2CF"/><ellipse cx="160" cy="' + (ny + 12) + '" rx="13" ry="4" fill="#00D2FF" opacity=".85"/><ellipse cx="160" cy="' + (ny + 20) + '" rx="8" ry="7" fill="#00D2FF" opacity=".25"/>';
+    else { var nw = D.prop === 'biprop' ? 15 : 10; s += '<path d="M' + (160 - nw / 2) + ' ' + ny + ' h' + nw + ' l' + nw / 2 + ' ' + (nw + 3) + ' h-' + nw * 2 + ' z" fill="#9DB2CF" stroke="#DCE7F7"/>'; }
+    // bus
+    s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="5" fill="#12294F" stroke="' + (D.extras.vault ? '#FFAE00' : '#DCE7F7') + '" stroke-width="' + (D.extras.vault ? 4 : 1.6) + '"/>';
+    s += '<rect x="' + (bx + 8) + '" y="' + (by + bh - tank - 4) + '" width="' + (bw - 16) + '" height="' + tank + '" rx="8" fill="none" stroke="#0099FF" stroke-dasharray="3 3"/>';
+    // antenna
+    if (dish >= 1) { var rw = 12 + dish * 11; s += '<line x1="160" y1="' + by + '" x2="160" y2="' + (by - 10) + '" stroke="#DCE7F7" stroke-width="2"/><path d="M' + (160 - rw) + ' ' + (by - 12 - rw * 0.42) + ' Q160 ' + (by - 2) + ' ' + (160 + rw) + ' ' + (by - 12 - rw * 0.42) + ' z" fill="#DCE7F7" stroke="#FFFFFF"/><circle cx="160" cy="' + (by - 14 - rw * 0.42) + '" r="2.5" fill="#00D2FF"/>'; }
+    else s += '<line x1="160" y1="' + by + '" x2="160" y2="' + (by - 14) + '" stroke="#DCE7F7" stroke-width="2"/><circle cx="160" cy="' + (by - 16) + '" r="3" fill="#00D2FF"/>';
+    // instruments
+    e.insts.slice(0, 8).forEach(function (id, i) {
+      var col = i % 2, row = Math.floor(i / 2), x = bx + 6 + col * 24, y = by + 6 + row * 11;
+      s += '<rect x="' + x + '" y="' + y + '" width="20" height="8" rx="2" fill="#FF9900"/><text x="' + (x + 10) + '" y="' + (y + 6.6) + '" text-anchor="middle" font-size="5.6" font-family="monospace" fill="#0B1D3A" font-weight="700">' + id.slice(0, 4).toUpperCase() + '</text>';
+    });
+    s += '<text x="10" y="18" font-size="10" fill="#9DB2CF" font-family="monospace">' + fmt(e.dry) + ' kg dry · ' + fmt(e.propKg) + ' kg propellant</text>';
+    s += '<text x="10" y="192" font-size="10" fill="#9DB2CF" font-family="monospace">' + fmt(e.pGen) + ' W at ' + e.d.name + ' · ' + (e.rate >= 1000 ? (e.rate / 1000).toFixed(1) + ' Mbps' : e.rate.toFixed(e.rate < 10 ? 1 : 0) + ' kbps') + '</text>';
+    return s + '</svg>';
+  }
+
+  /* ---------- small view helpers ---------- */
+  function chips(a) { return a && a.length ? '<span class="chips">' + a.map(function (c) { return '<span class="chip">' + c[0] + ' <b>' + c[1] + '</b></span>'; }).join('') + '</span>' : ''; }
+  function opt(o) { return '<button type="button" class="opt' + (o.sel ? ' sel' : '') + (o.dim ? ' dim' : '') + '" data-act="' + o.act + '" data-k="' + (o.k || '') + '" data-v="' + o.v + '" aria-pressed="' + (!!o.sel) + '"><span class="opt-h">' + o.title + (o.badge ? '<em>' + o.badge + '</em>' : '') + '</span><span class="opt-d">' + o.desc + '</span>' + chips(o.stats) + (o.note ? '<span class="opt-n">' + o.note + '</span>' : '') + '</button>'; }
+  function group(title, small, body, note) { return '<section class="group"><h3>' + title + (small ? ' <small>' + small + '</small>' : '') + '</h3>' + (note ? '<p class="note">' + note + '</p>' : '') + body + '</section>'; }
+  function src(est, text) { return '<span class="src' + (est ? ' est' : '') + '">' + (text || (est ? 'game estimate' : 'NASA data')) + '</span>'; }
+  function slider(k, label, min, max, step, val, out, small) { return '<div class="slider"><label for="in-' + k + '"><span>' + label + '</span><output id="out-' + k + '">' + out + '</output></label><input type="range" id="in-' + k + '" data-k="' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '"><small id="sm-' + k + '">' + (small || '') + '</small></div>'; }
+  function meter(name, demand, supply, label, phrase, help) {
+    var r = supply > 0 ? demand / supply : 2, cls = r > 1 ? 'bad' : r > 0.9 ? 'tight' : 'ok';
+    return '<div class="meter ' + cls + '" title="' + esc(help) + '"><div class="meter-top"><b>' + name + '</b><span class="num">' + label + '</span></div><div class="mbar"><i style="width:' + Math.min(100, r * 100 / 1.1).toFixed(1) + '%"></i><u style="left:' + (100 / 1.1).toFixed(1) + '%"></u></div><small>' + phrase[cls] + '</small></div>';
+  }
+  function level(n) { var s = '<span class="level" aria-label="Difficulty ' + n + ' of 4">'; for (var i = 1; i <= 4; i++) s += '<i' + (i <= n ? ' class="on"' : '') + '></i>'; return s + '</span>'; }
+
+  /* ---------- status bar ---------- */
+  function bar() {
+    var d = S.design ? E.DEST[S.design.dest] : null, lt = '';
+    if (d && S.screen !== 'home') lt = '<div class="owlt" title="How long a radio signal takes to cross from Earth to the spacecraft"><span>One-way light time · ' + d.name + '</span><b class="num">' + dur(d.dMin / E.K.c) + (d.dMax / d.dMin > 1.2 ? ' – ' + dur(d.dMax / E.K.c) : '') + '</b></div>';
+    return '<header class="bar"><button class="brand" data-act="home" type="button" aria-label="Signal Delay, back to mission select"><i></i>SIGNAL DELAY</button>' + lt + '<span class="spacer"></span>' +
+      '<div class="seg" role="group" aria-label="Difficulty mode"><button type="button" data-act="mode" data-v="cadet" aria-pressed="' + (S.mode === 'cadet') + '">CADET</button><button type="button" data-act="mode" data-v="engineer" aria-pressed="' + (S.mode === 'engineer') + '">ENGINEER</button></div>' +
+      '<button class="link" data-act="modal" data-v="glossary" type="button">Glossary</button><button class="link" data-act="modal" data-v="board" type="button">Leaderboard</button><button class="link" data-act="modal" data-v="sources" type="button">Data sources</button></header>';
+  }
+
+  /* ---------- home ---------- */
+  function home() {
+    var lanes = [['Moon', 384400, 'moon'], ['Mars, average distance', 228e6, 'mars'], ['Jupiter, average distance', 778.5e6, 'jupiter']].map(function (l, i) {
+      var t = l[1] / E.K.c;
+      return '<div class="lane" data-lane="' + t + '"><div class="lane-top"><b>' + l[0] + '</b><span class="num">' + dur(t) + ' one way</span></div><div class="track"><span class="earth"></span><span class="body" style="background:' + PLANET[l[2]] + '"></span><span class="pulse" id="pulse-' + i + '"></span></div><small class="num" id="lane-' + i + '">&nbsp;</small></div>';
+    }).join('');
+    var roles = E.ROLES.map(function (r, i) { return '<label for="pl-' + i + '"' + (i < S.players.length ? '' : ' hidden') + '><span class="tagrole r-' + E.ROLES[i].id + '">P' + (i + 1) + '</span><input type="text" id="pl-' + i + '" data-player="' + i + '" maxlength="18" placeholder="Player ' + (i + 1) + ' name" value="' + esc(S.players[i] || '') + '"></label>'; }).join('');
+    var roleList = E.ROLES.map(function (r, i) { return '<div class="goal"><span class="tagrole r-' + r.id + '">' + r.short + '</span><span>' + r.name + '<br><span class="mute">' + esc(playerName(i)) + '</span></span><span></span></div>'; }).join('');
+    var missions = Object.keys(E.DEST).map(function (id) {
+      var d = E.DEST[id], real = E.REAL[d.real];
+      return '<button type="button" class="mission" data-act="start" data-v="' + id + '"><span class="planet" style="background:' + PLANET[id] + '"></span><span>' + level(d.level) + '</span><h3>' + d.name + '</h3><span class="tag">' + d.tag + '</span><p>' + d.blurb + '</p><dl>' +
+        '<div><dt>Signal delay</dt><dd class="num">' + (d.dMax / d.dMin > 1.2 ? dur(d.dMin / E.K.c) + ' to ' + dur(d.dMax / E.K.c) : dur((d.dMin + d.dMax) / 2 / E.K.c)) + '</dd></div>' +
+        '<div><dt>Sunlight</dt><dd class="num">' + sunPct(d) + '% of Earth</dd></div>' +
+        '<div><dt>Cost cap</dt><dd class="num">$' + fmt(d.budget * (S.mode === 'cadet' ? 1.2 : 1)) + 'M</dd></div>' +
+        '<div><dt>Flown by</dt><dd>' + real.name + '</dd></div></dl></button>';
+    }).join('');
+    var resume = S.design ? '<button class="btn" type="button" data-act="resume">Continue your ' + E.DEST[S.design.dest].name + ' design</button>' : '';
+    return '<div class="wrap"><section class="hero"><div><p class="eyebrow">Space mission design game</p><h1 class="display">Signal <span>Delay</span></h1><p class="lede">Design a spacecraft, launch it, and fly it through trouble you cannot fix in real time. By the time Earth hears about a problem, it has already happened.</p></div>' +
+      '<div class="lanes"><h2>THREE SIGNALS LEAVING EARTH, IN REAL TIME</h2>' + lanes + '</div></section>' +
+      '<section class="setup"><div class="panel"><h3>1 · Choose your mode</h3><div class="modes">' +
+      '<button type="button" class="mode" data-act="mode" data-v="cadet" aria-pressed="' + (S.mode === 'cadet') + '"><b>CADET</b><span>Echo, your flight mentor, explains every problem and how to fix it. Fuel is loaded for you and the cost cap is 20% higher.</span></button>' +
+      '<button type="button" class="mode" data-act="mode" data-v="engineer" aria-pressed="' + (S.mode === 'engineer') + '"><b>ENGINEER</b><span>Full numbers: Δv budgets, launch energy, link rates, failure odds. You load the propellant, set the test campaign and book the antennas.</span></button></div>' +
+      '<p class="mute" style="margin-top:10px;font-size:12px">Switch at any time from the top bar. Your design carries over.</p></div>' +
+      '<div class="panel"><h3>2 · Assemble the crew</h3><div class="count" role="group" aria-label="Number of players">' + [1, 2, 3, 4].map(function (n) { return '<button type="button" data-act="players" data-v="' + n + '" aria-pressed="' + (S.players.length === n) + '">' + n + '</button>'; }).join('') + '</div><div class="crew">' + roles + '<label for="team-name"><span class="mute">Team</span><input type="text" id="team-name" data-team="1" maxlength="24" placeholder="Team name for the leaderboard" value="' + esc(S.team) + '"></label></div></div>' +
+      '<div class="panel"><h3>3 · Who decides what</h3><div class="goals" style="border:0;padding:0;background:none">' + roleList + '</div><p class="mute" style="margin:10px 0;font-size:12px">Each seat owns part of the design and has its own goal. The budget is shared, so you will have to negotiate. With fewer than four players, seats are shared out.</p><label class="check" for="sandbox"><input type="checkbox" id="sandbox" data-act="sandbox"' + (S.sandbox ? ' checked' : '') + '><span>Sandbox: no cost cap and no launch mass limit</span></label></div></section>' +
+      '<div class="sec-title"><h2>4 · Pick a destination</h2>' + resume + '</div><section class="missions">' + missions + '</section>' +
+      '<footer class="foot"><span>Built by team Chill Guys for the NASA Space Apps Challenge. Planetary data from NASA fact sheets; estimates are labelled in Data sources.</span><span>NASA does not endorse this project.</span></footer></div>';
+  }
+
+  /* ---------- telemetry column ---------- */
+  function tele(e) {
+    var D = S.design, worst = e.issues.filter(function (i) { return i.level === 'block'; })[0] || e.issues.filter(function (i) { return i.level === 'warn'; })[0];
+    var open = e.reqs.filter(function (r) { return !r.ok; });
+    var tip;
+    if (worst) tip = '<div class="tip">' + echo(worst.level === 'block' ? 'worried' : 'calm') + '<div><b>ECHO · FLIGHT MENTOR</b><p>' + esc(worst.title) + '.</p><p class="cadet-only">' + esc(worst.why) + ' ' + esc(worst.fix) + '</p><p class="eng-only">' + esc(worst.why) + '</p></div></div>';
+    else if (open.length) tip = '<div class="tip">' + echo('calm') + '<div><b>ECHO · FLIGHT MENTOR</b><p>Nothing is broken. Still open: ' + esc(open[0].label.toLowerCase()) + ' (now ' + open[0].value + ').</p></div></div>';
+    else tip = '<div class="tip">' + echo('happy') + '<div><b>ECHO · FLIGHT MENTOR</b><p>Every requirement closes with margin. Go to Review and poll the team.</p></div></div>';
+    var sc = E.score(e), cad = S.mode === 'cadet';
+    var m = '';
+    m += meter('Mass', e.wet, e.sandbox ? e.wet * 3 : e.cap, fmt(e.wet) + ' / ' + (e.sandbox ? 'no limit' : fmt(e.cap) + ' kg'), { ok: 'Fits the rocket with ' + pct(Math.max(0, e.massMargin)) + ' to spare', tight: 'Fits, with almost no margin', bad: 'Too heavy for this rocket' }, 'Fuelled spacecraft mass against what the launch vehicle can send onto this route.');
+    m += meter('Fuel', e.dv.total, e.dvAvail, fmt(e.dv.total) + ' / ' + fmt(e.dvAvail) + ' m/s', { ok: 'Enough for every burn, ' + pct(e.dvMargin) + ' spare', tight: 'Barely enough fuel', bad: 'Runs dry before the mission ends' }, 'Velocity change the mission needs against what the tanks can deliver.');
+    m += meter('Power', e.pLoad, e.pGen, fmt(e.pLoad) + ' / ' + fmt(e.pGen) + ' W', { ok: 'Supply covers demand' + (e.eclOK ? '' : ', but the battery is too small'), tight: 'Almost no power to spare', bad: 'Demand exceeds supply' }, 'Power drawn with everything on against power generated at the destination.');
+    m += meter('Data', e.genGB, e.downGB, e.genGB.toFixed(1) + ' / ' + (e.downGB >= 100 ? fmt(e.downGB) : e.downGB.toFixed(2)) + ' GB a day', { ok: 'Everything recorded gets home', tight: 'The link is nearly full', bad: 'Only ' + pct(e.dataFrac) + ' of the data gets home' }, 'Data the instruments record each day against what the radio link can return.');
+    m += meter('Budget', e.cost.total, e.sandbox ? e.cost.total * 3 : e.budget, '$' + fmt(e.cost.total) + 'M / ' + (e.sandbox ? 'no cap' : '$' + fmt(e.budget) + 'M'), { ok: '$' + fmt(e.budget - e.cost.total) + 'M under the cap', tight: 'Close to the cap', bad: 'Over the cost cap' }, 'Total cost including launch and operations against the cap for this mission class.');
+    m += meter('Time', e.timeline, e.deadline, e.timeline.toFixed(1) + ' / ' + e.deadline + ' years', { ok: 'Build ' + (e.devMonths / 12).toFixed(1) + ' yr, cruise ' + days(e.cruiseDays) + ', science ' + e.years + ' yr', tight: 'Results arrive just before the deadline', bad: 'Results arrive after the deadline' }, 'Development, cruise and operations against the programme deadline.');
+    var sciCls = e.sciPct >= 1 ? 'ok' : e.sciPct >= 0.7 ? 'tight' : 'bad', riskCls = e.risk.success >= 0.85 ? 'ok' : e.risk.success >= 0.7 ? 'tight' : 'bad';
+    m += '<div class="meter ' + sciCls + '" title="Science the design should return, as a share of the objective"><div class="meter-top"><b>Science</b><span class="num">' + pct(e.sciPct) + ' of objective</span></div><div class="mbar"><i style="width:' + Math.min(100, e.sciPct / 1.25 * 100).toFixed(1) + '%"></i><u style="left:80%"></u></div><small>' + (e.sciPct >= 1 ? 'Meets the objective' : e.sciPct >= 0.7 ? 'Short of the objective' : 'Far short of the objective') + '</small></div>';
+    m += '<div class="meter ' + riskCls + '" title="Chance the mission survives launch, cruise, arrival and operations"><div class="meter-top"><b>Success chance</b><span class="num">' + pct(e.risk.success) + '</span></div><div class="mbar"><i style="width:' + (e.risk.success * 100).toFixed(1) + '%"></i><u style="left:80%"></u></div><small>' + (cad ? (e.risk.success >= 0.85 ? 'A robust design' : 'Riskier than a review board would accept') : 'Launch ' + (e.risk.launch * 100).toFixed(1) + '% · cruise ' + (e.risk.cruise * 100).toFixed(1) + '% · arrival ' + (e.risk.arrival * 100).toFixed(1) + '% · ops ' + (e.risk.ops * 100).toFixed(1) + '% loss') + '</small></div>';
+    var goals = '';
+    if (S.players.length > 1) goals = '<div class="goals"><h3>Department goals</h3>' + E.ROLES.map(function (r, i) { var ok = r.test(e); return '<div class="goal"><span class="tagrole r-' + r.id + '">' + r.short + '</span><span>' + esc(playerName(i)) + ': ' + r.goal + '</span><span class="tick ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '–') + '</span></div>'; }).join('') + '</div>';
+    return tip + '<div class="craft">' + craftSVG(D, e) + '</div><div class="meters">' + m + '</div><div class="forecast"><span>Design forecast<br>before flight events</span><b class="num">' + sc.total + '<span style="font-size:12px;color:var(--mute)"> / 900</span></b></div>' + goals;
+  }
+
+  /* ---------- step bodies ---------- */
+  function stepObjective(e) {
+    var d = e.d, D = S.design, real = E.REAL[d.real];
+    var body = '<div class="opts">' + d.objectives.map(function (o) { return opt({ act: 'set', k: 'objective', v: o.key, sel: D.objective === o.key, title: o.title, desc: o.hint, stats: [['Science goal', o.goal + ' pts']] }); }).join('') + '</div>';
+    var facts = '<div class="scroll"><table class="table"><tbody>' +
+      '<tr><th>Distance from Earth</th><td class="num">' + fmt(d.dMin / 1e6 >= 1 ? d.dMin / 1e6 : d.dMin) + (d.dMin / 1e6 >= 1 ? ' to ' + fmt(d.dMax / 1e6) + ' million km' : ' to ' + fmt(d.dMax) + ' km') + '</td><td>' + src(D.dest === 'bennu') + '</td></tr>' +
+      '<tr><th>Signal delay, one way</th><td class="num">' + dur(d.dMin / E.K.c) + ' to ' + dur(d.dMax / E.K.c) + '</td><td>' + src(false, 'computed') + '</td></tr>' +
+      '<tr><th>Sunlight</th><td class="num">' + sunPct(d) + '% of Earth’s, ' + fmt(E.K.S0 / (d.sunAU * d.sunAU)) + ' W/m²</td><td>' + src(false) + '</td></tr>' +
+      '<tr><th>Gravity (GM)</th><td class="num">' + (d.mu ? fmt(d.mu) + ' km³/s²' : 'negligible') + '</td><td>' + src(false) + '</td></tr>' +
+      '<tr><th>Cost cap</th><td class="num">$' + fmt(e.budget) + 'M, launch and operations included</td><td>' + src(true) + '</td></tr>' +
+      '<tr><th>Deadline</th><td class="num">Results within ' + e.deadline + ' years of project start</td><td>' + src(true) + '</td></tr></tbody></table></div>';
+    var reqs = '<div class="reqs">' + e.reqs.map(function (r) { return '<div class="req ' + (r.ok ? 'ok' : 'no') + '"><span class="tick ' + (r.ok ? 'ok' : 'no') + '">' + (r.ok ? '✓' : '○') + '</span><span>' + r.label + '</span><span class="num mute">' + r.value + '</span></div>'; }).join('') + '</div>';
+    return group('What question will this mission answer?', '', body) + group('Mission requirements', 'these close as you design', reqs, 'Real projects write requirements before hardware. These eight follow from the objective and the mission class.') + group('The destination', '', facts) +
+      group('Who flew it for real', '', '<div class="panel"><b style="font-family:var(--display);letter-spacing:.06em">' + real.name + ' · ' + real.year + '</b><p style="margin-top:6px;color:#DCE7F7">' + real.note + '</p><p class="mute" style="margin-top:6px;font-size:12px">' + fmt(real.wet) + ' kg at launch on ' + real.lv + '. Your debrief compares your design with it.</p></div>');
+  }
+  function stepRoute(e) {
+    var d = e.d, D = S.design;
+    var tr = '<div class="opts">' + d.traj.map(function (t) {
+      return opt({ act: 'set', k: 'traj', v: t.id, sel: D.traj === t.id, title: t.name, badge: t.est ? 'estimate' : '', desc: t.desc, stats: [['Launch energy C3', t.c3.toFixed(1) + ' km²/s²'], ['Cruise', days(t.tof)], ['Arrival speed', t.vinf ? t.vinf.toFixed(2) + ' km/s' : 'matched'], ['Deep-space burns', fmt(t.dsm) + ' m/s']] });
+    }).join('') + '</div>';
+    var or = '<div class="opts">' + d.orbits.map(function (o) {
+      var cap = o.fixedDv != null ? o.fixedDv : E.captureDv(d.mu, d.R, e.tr.vinf, o.hp, o.ha) * 1000, f = o.sci[D.objective];
+      return opt({ act: 'set', k: 'orbit', v: o.id, sel: D.orbit === o.id, title: o.name, desc: o.desc, stats: [['Burn to get in', fmt(cap) + ' m/s'], ['Science here', '×' + (f != null ? f : 0.6).toFixed(2)], ['Shadow each orbit', o.ecl ? o.ecl + ' h' : 'none'], ['Upkeep', o.sk + ' m/s a year'], ['Radiation', o.rad > 2.5 ? 'severe' : o.rad > 1.5 ? 'high' : o.rad > 1.05 ? 'raised' : 'normal']], note: D.objective === 'samp' && !o.sample ? 'Sample return needs the touch-and-go plan.' : '' });
+    }).join('') + '</div>';
+    var yrs = slider('years', 'Science phase', 0.5, 5, 0.5, D.years, D.years + (D.years === 1 ? ' year' : ' years'), 'Longer means more science, more operations cost, more upkeep fuel and more time for something to break.');
+    var nums = '<details class="numbers eng-only" open><summary>Δv budget</summary><div class="scroll"><table class="table"><tbody>' +
+      '<tr><td>Trajectory corrections</td><td class="r num">' + fmt(e.dv.tcm) + ' m/s</td></tr><tr><td>Deep-space manoeuvres</td><td class="r num">' + fmt(e.dv.dsm) + ' m/s</td></tr><tr><td>Orbit insertion or rendezvous</td><td class="r num">' + fmt(e.dv.capture) + ' m/s</td></tr><tr><td>Station-keeping, ' + e.years + ' yr</td><td class="r num">' + fmt(e.dv.sk) + ' m/s</td></tr>' + (e.dv.ret ? '<tr><td>Departure for Earth</td><td class="r num">' + fmt(e.dv.ret) + ' m/s</td></tr>' : '') + (e.dv.lowF > 1 ? '<tr><td>Low-thrust penalty</td><td class="r num">×' + e.dv.lowF + '</td></tr>' : '') +
+      '<tr><th>Required</th><th class="r num">' + fmt(e.dv.total) + ' m/s</th></tr><tr><th>Available (Isp ' + e.isp + ' s, ' + fmt(e.propKg) + ' kg)</th><th class="r num">' + fmt(e.dvAvail) + ' m/s</th></tr></tbody></table></div><p class="mute" style="font-size:12px;margin-top:6px">Insertion burn from the vis-viva equation at periapsis. Transfers assume circular, coplanar planetary orbits.</p></details>';
+    return group('Trajectory', src(false, 'computed from NASA fact sheets'), tr, 'Launch energy, written C3, is how hard the rocket must throw the spacecraft away from Earth. Higher C3 means a smaller spacecraft on the same rocket.') +
+      '<div class="plot"><canvas id="plot" width="900" height="360" aria-label="Diagram of the transfer from Earth"></canvas></div>' +
+      group('Science orbit', '', or, 'Braking into orbit is usually the biggest burn of the mission. Low orbits see the most and cost the most to reach.') + group('How long will you operate?', '', yrs) + nums;
+  }
+  function stepSpacecraft(e) {
+    var D = S.design, d = e.d, cad = S.mode === 'cadet';
+    var props = Object.keys(E.PROP).filter(function (k) { return !(cad && k === 'ion') || D.prop === 'ion'; }).map(function (k) { var p = E.PROP[k]; return opt({ act: 'set', k: 'prop', v: k, sel: D.prop === k, title: p.name, desc: p.desc, stats: [['Efficiency (Isp)', p.isp + ' s'], ['Hardware', p.mass + ' kg'], ['Cost', '$' + p.cost + 'M']].concat(p.lowThrust ? [['Needs', '2,000 W']] : []) }); }).join('');
+    var per = E.solarPower(1, d.sunAU);
+    var pow = slider('solarM2', 'Solar array area', 0, 70, 1, D.solarM2, D.solarM2 + ' m² → ' + fmt(e.pSolar) + ' W', 'Each square metre makes ' + per.toFixed(0) + ' W at ' + d.name + ' (it would make ' + E.solarPower(1, 1).toFixed(0) + ' W at Earth). 3.5 kg and $0.7M per m².') +
+      '<div class="slider"><label><span>Radioisotope generators (MMRTG)</span><span class="stepper"><button type="button" data-act="rtg" data-v="-1" aria-label="Remove one generator">−</button><output class="num">' + D.rtg + '</output><button type="button" data-act="rtg" data-v="1" aria-label="Add one generator">+</button></span></label><small>110 W each at launch, in any light, fading about 2.5% a year. 45 kg and $80M each, plus $25M and ten months for nuclear launch approval. ' + src(false, 'NASA MMRTG') + '</small></div>';
+    var batt = Object.keys(E.BATT).map(function (k) { var b = E.BATT[k]; return opt({ act: 'set', k: 'battery', v: k, sel: D.battery === k, title: b.name, desc: 'Safely gives ' + fmt(b.wh * E.K.dod) + ' Wh per shadow pass. This orbit needs ' + fmt(e.eclNeed) + ' Wh.', stats: [['Mass', b.mass + ' kg'], ['Cost', '$' + b.cost + 'M']] }); }).join('');
+    var comp = Object.keys(E.COMP).map(function (k) { var c = E.COMP[k]; return opt({ act: 'set', k: 'computer', v: k, sel: D.computer === k, title: c.name, desc: c.desc, stats: [['Storage', c.gb + ' GB'], ['Mass', c.mass + ' kg'], ['Power', c.power + ' W'], ['Cost', '$' + c.cost + 'M']] }); }).join('');
+    var adcs = Object.keys(E.ADCS).map(function (k) { var a = E.ADCS[k]; return opt({ act: 'set', k: 'adcs', v: k, sel: D.adcs === k, title: a.name, desc: a.desc, stats: [['Mass', a.mass + ' kg'], ['Power', a.power + ' W'], ['Cost', '$' + a.cost + 'M']] }); }).join('');
+    var ext = Object.keys(E.EXTRA).map(function (k) { var x = E.EXTRA[k]; return opt({ act: 'extra', v: k, sel: !!D.extras[k], title: x.name, desc: x.desc, stats: [['Mass', x.mass + ' kg'], ['Cost', '$' + x.cost + 'M'], ['Schedule', '+' + x.months + ' mo']] }); }).join('');
+    var mp = e.massParts, nums = '<details class="numbers eng-only" open><summary>Mass and power budgets</summary><div class="scroll"><table class="table"><thead><tr><th>Mass</th><th class="r">kg</th><th>Power</th><th class="r">W</th></tr></thead><tbody>' +
+      '<tr><td>Instruments</td><td class="r num">' + fmt(mp.payload) + '</td><td>Solar arrays at ' + d.name + '</td><td class="r num">' + fmt(e.pSolar) + '</td></tr>' +
+      '<tr><td>Bus subsystems</td><td class="r num">' + fmt(mp.bus) + '</td><td>Generators, end of mission</td><td class="r num">' + fmt(e.pRtg) + '</td></tr>' +
+      '<tr><td>Structure (22%)</td><td class="r num">' + fmt(mp.structure) + '</td><td>Bus and heaters</td><td class="r num">−' + fmt(e.pBus) + '</td></tr>' +
+      '<tr><td>Growth allowance (30%)</td><td class="r num">' + fmt(mp.growth) + '</td><td>Transmitter and instruments</td><td class="r num">−' + fmt(e.pLoad - e.pBus) + '</td></tr>' +
+      '<tr><td>Tanks</td><td class="r num">' + fmt(mp.tanks) + '</td><th>Margin</th><th class="r num">' + pct(e.powerMargin) + '</th></tr>' +
+      '<tr><th>Dry mass</th><th class="r num">' + fmt(e.dry) + '</th><td></td><td></td></tr><tr><td>Propellant</td><td class="r num">' + fmt(mp.prop) + '</td><td></td><td></td></tr><tr><th>Launch mass</th><th class="r num">' + fmt(e.wet) + '</th><td></td><td></td></tr></tbody></table></div></details>';
+    return group('Propulsion', src(true, 'costs are game estimates'), '<div class="opts">' + props + '</div>', 'Specific impulse, Isp, is fuel economy: how long one kilogram of propellant can produce one kilogram of thrust. Higher is better.') +
+      group('Power', src(false, 'calibrated to MAVEN'), pow, 'Sunlight weakens with the square of distance from the Sun. Arrays that run a spacecraft at Earth give a trickle at Jupiter.') +
+      group('Battery', '', '<div class="opts">' + batt + '</div>', 'In the planet’s shadow the arrays make nothing. The battery carries the core systems until sunrise.') +
+      group('Flight computer', '', '<div class="opts">' + comp + '</div>') + group('Pointing', '', '<div class="opts">' + adcs + '</div>') + group('Optional systems', '', '<div class="opts">' + ext + '</div>') + nums;
+  }
+  function stepPayload(e) {
+    var D = S.design, cur = {};
+    e.sciItems.forEach(function (x) { cur[x.id] = x; });
+    var cards = Object.keys(E.INST).filter(function (k) { return !E.INST[k].only || E.INST[k].only === D.dest; }).map(function (k) {
+      var I = E.INST[k], sel = D.instruments.indexOf(k) >= 0, x = cur[k];
+      if (!x) { var T = JSON.parse(JSON.stringify(D)); T.instruments.push(k); x = E.evaluate(T, { mode: S.mode, sandbox: S.sandbox }).sciItems.filter(function (y) { return y.id === k; })[0]; }
+      return opt({ act: 'inst', v: k, sel: sel, dim: !sel && x.pts < 1, title: I.name, badge: (x.pts >= 10 ? x.pts.toFixed(0) : x.pts.toFixed(1)) + ' pts', desc: I.desc, stats: [['Mass', I.mass + ' kg'], ['Power', I.power + ' W'], ['Cost', '$' + I.cost + 'M'], ['Data', I.gb + ' GB a day']], note: x.note ? 'Reduced: ' + x.note + '.' : (I.needs === 'p' ? 'Needs precision pointing.' : '') });
+    }).join('');
+    var chain = '<div class="chain"><div class="link-box"><small>Instruments</small><b class="num">' + e.sciRaw.toFixed(1) + ' pts</b></div><span class="x">×</span><div class="link-box' + (e.orbF < 0.8 ? ' low' : '') + '"><small>Orbit</small><b class="num">' + e.orbF.toFixed(2) + '</b></div><span class="x">×</span><div class="link-box' + (e.dataFrac < 0.95 ? ' low' : '') + '"><small>Data returned</small><b class="num">' + e.dataFrac.toFixed(2) + '</b></div><span class="x">×</span><div class="link-box' + (e.durF < 0.9 ? ' low' : '') + '"><small>Time on station</small><b class="num">' + e.durF.toFixed(2) + '</b></div><span class="x">÷</span><div class="link-box"><small>Goal</small><b class="num">' + e.obj.goal + ' pts</b></div><span class="x">=</span><div class="link-box end"><small>Science</small><b class="num">' + pct(e.sciPct) + '</b></div></div>';
+    return group('Science chain', '', chain, 'Points count in full toward your objective, “' + e.obj.title + '”, and at 30% toward the other two. Then the orbit, the data link and time each take their share.') +
+      group('Instruments', 'tap to add or remove · ' + D.instruments.length + ' on board', '<div class="opts">' + cards + '</div>');
+  }
+  function stepComms(e) {
+    var D = S.design, d = e.d, cad = S.mode === 'cadet';
+    function rateWith(k, v) { var T = JSON.parse(JSON.stringify(D)); T[k] = v; return E.evaluate(T, { mode: S.mode, sandbox: S.sandbox }); }
+    function rtxt(r) { return r >= 1000 ? (r / 1000).toFixed(1) + ' Mbps' : r.toFixed(r < 10 ? 1 : 0) + ' kbps'; }
+    var ant = Object.keys(E.ANT).map(function (k) { var a = E.ANT[k], x = rateWith('antenna', k); return opt({ act: 'set', k: 'antenna', v: k, sel: D.antenna === k, title: a.name, desc: a.desc, stats: [['Rate here', rtxt(x.rate)], ['Mass', a.mass + ' kg'], ['Cost', '$' + a.cost + 'M']] }); }).join('');
+    var tx = Object.keys(E.TX).map(function (k) { var t = E.TX[k], x = rateWith('tx', k); return opt({ act: 'set', k: 'tx', v: k, sel: D.tx === k, title: t.name, desc: 'Radiates ' + t.pt + ' W and draws ' + t.dc + ' W from the bus.', stats: [['Rate here', rtxt(x.rate)], ['Mass', t.mass + ' kg'], ['Cost', '$' + t.cost + 'M']] }); }).join('');
+    var dsnH = E.K.dsnRate * 1.6;
+    var gs = [['34', '34 m antennas', 'The workhorses of the Deep Space Network.', 1], ['70', '70 m antennas', 'Collect 4.28 times more signal. Only three exist, so time on them costs four times as much.', 4]].map(function (g) { var x = rateWith('dsn', g[0]); return opt({ act: 'set', k: 'dsn', v: g[0], sel: D.dsn === g[0], title: g[1], desc: g[2], stats: [['Rate here', rtxt(x.rate)], ['Fee', '$' + fmt(dsnH * g[3]) + ' an hour']] }); }).join('');
+    var hrs = slider('hours', 'Contact time booked', 2, 16, 1, D.hours, D.hours + ' h a day', 'More hours return more data and cost more. At this rate each hour a day returns ' + (e.rate * 3600 / 8e6).toFixed(2) + ' GB.');
+    var sum = '<div class="scroll"><table class="table"><tbody><tr><th>Data rate at typical distance</th><td class="r num">' + rtxt(e.rate) + '</td></tr><tr><th>Data rate at the farthest point</th><td class="r num">' + rtxt(e.rateWorst) + '</td></tr><tr><th>Returned each day</th><td class="r num">' + (e.downGB >= 100 ? fmt(e.downGB) : e.downGB.toFixed(2)) + ' GB</td></tr><tr><th>Recorded each day' + (D.extras.compress ? ', compressed' : '') + '</th><td class="r num">' + e.genGB.toFixed(2) + ' GB</td></tr><tr><th>Onboard storage</th><td class="r num">' + e.storageGB + ' GB, ' + (e.storageDays >= 99 ? 'never fills' : e.storageDays.toFixed(1) + ' days of data') + '</td></tr><tr><th>Round-trip signal time</th><td class="r num">' + dur(2 * d.dMin / E.K.c) + ' to ' + dur(2 * d.dMax / E.K.c) + '</td></tr></tbody></table></div>';
+    var nums = '<p class="mute eng-only" style="font-size:12px">Link model: rate scales with transmitter power, the square of both antenna diameters and the inverse square of distance, anchored to Mars Reconnaissance Orbiter (100 W, 3 m dish, 34 m station, 500 kbps at 400 million km). Capped at ' + (D.dest === 'moon' ? '100 Mbps (LRO Ka-band)' : '6 Mbps (the X-band coding limit)') + '.</p>';
+    return group('Spacecraft antenna', src(false, 'anchored to MRO'), '<div class="opts">' + ant + '</div>', 'A dish focuses the signal like a torch beam. Doubling its diameter quadruples the data rate.') +
+      group('Transmitter', '', '<div class="opts">' + tx + '</div>') + group('Ground stations', src(false, 'DSN fee formula'), '<div class="opts">' + gs + '</div>') +
+      (cad ? '' : group('Contact schedule', '', hrs)) + group('Link summary', '', sum + nums);
+  }
+  function stepLaunch(e) {
+    var D = S.design, cad = S.mode === 'cadet';
+    var lvs = Object.keys(E.LV).map(function (k) {
+      var l = E.LV[k], cap = E.lvCap(k, e.tr.c3), bad = l.moonOnly && D.dest !== 'moon', fits = !bad && cap >= e.wet;
+      return opt({ act: 'set', k: 'lv', v: k, sel: D.lv === k, dim: !fits && !S.sandbox, title: l.name, desc: l.note, stats: [['Can send', bad ? 'Moon only' : fmt(cap) + ' kg'], ['Price', '$' + l.price + 'M'], ['Reliability', (l.rel * 100).toFixed(1) + '%']], note: bad ? '' : fits ? 'Margin ' + pct((cap - e.wet) / cap) + '.' : fmt(e.wet - cap) + ' kg too little.' });
+    }).join('');
+    var fuel = '<label class="check" for="autofuel"><input type="checkbox" id="autofuel" data-act="autofuel"' + (D.autoFuel ? ' checked' : '') + '><span>Load propellant automatically for a 15% margin</span></label>' +
+      (D.autoFuel ? '<p class="note mute">' + (e.propKg >= 99999 ? 'No load closes the design.' : 'Loading ' + fmt(e.propKg) + ' kg.') + '</p>' : slider('propKg', 'Propellant loaded', 50, 6000, 10, D.propKg, fmt(D.propKg) + ' kg → ' + fmt(e.dvAvail) + ' m/s', 'The mission needs ' + fmt(e.dv.total) + ' m/s. Tanks add 12% of the propellant mass.'));
+    var sch = Object.keys(E.SCHED).map(function (k) { var s = E.SCHED[k]; return opt({ act: 'set', k: 'schedule', v: k, sel: D.schedule === k, title: s.name, desc: s.desc, stats: [['Schedule', (s.months > 0 ? '+' : '') + s.months + ' months'], ['Project cost', (s.costF >= 1 ? '+' : '−') + Math.abs(Math.round((s.costF - 1) * 100)) + '%'], ['Failure odds', '×' + s.test]] }); }).join('');
+    return group('Launch vehicle', src(true, 'curves approximate NASA LSP data'), '<div class="opts">' + lvs + '</div>', 'Capacities are for your route, at a launch energy of C3 ' + e.tr.c3.toFixed(1) + ' km²/s². Your spacecraft weighs ' + fmt(e.wet) + ' kg fuelled.') +
+      (cad ? '' : group('Propellant', '', fuel, 'The rocket equation: every kilogram of propellant also has to be pushed, so adding fuel gives less and less.')) +
+      (cad ? '' : group('Test campaign', '', '<div class="opts">' + sch + '</div>'));
+  }
+  function stepReview(e) {
+    var D = S.design, mc = E.monteCarlo(e, 500, 2026), t = mc.tally;
+    var reqs = '<div class="reqs">' + e.reqs.map(function (r) { return '<div class="req ' + (r.ok ? 'ok' : 'no') + '"><span class="tick ' + (r.ok ? 'ok' : 'no') + '">' + (r.ok ? '✓' : '○') + '</span><span>' + r.label + '</span><span class="num mute">' + r.value + '</span></div>'; }).join('') + '</div>';
+    var order = { block: 0, warn: 1, info: 2 }, label = { block: 'Blocks launch', warn: 'Warning', info: 'Worth knowing' };
+    var iss = e.issues.slice().sort(function (a, b) { return order[a.level] - order[b.level]; }).map(function (i) { return '<div class="issue ' + i.level + '"><span class="k">' + label[i.level] + '</span><b>' + esc(i.title) + '</b><p>' + esc(i.why) + '</p><p class="fix cadet-only">Try: ' + esc(i.fix) + '</p></div>'; }).join('') || '<p class="mute">No open issues.</p>';
+    var dots = '<div class="mc" aria-label="500 simulated flights">' + mc.runs.map(function (r) { return '<i class="' + r + '"></i>'; }).join('') + '</div><div class="legend"><span><i style="background:var(--cyan)"></i>' + t.ok + ' completed</span><span><i style="background:var(--bad)"></i>' + t.launch + ' lost at launch</span><span><i style="background:var(--amber)"></i>' + t.cruise + ' in cruise</span><span><i style="background:var(--orange)"></i>' + t.arrival + ' at arrival</span><span><i style="background:var(--tan)"></i>' + t.ops + ' during science</span>' + (t.sample ? '<span><i style="background:var(--blue)"></i>' + t.sample + ' on return</span>' : '') + '</div>';
+    var c = e.cost, spend = [['SCI', c.payload * 1.6, 'var(--cyan)', 'Instruments and their share of project costs'], ['SYS', (c.bus - 0) * 1.6 - 0, 'var(--blue)', 'Spacecraft bus and its share of project costs'], ['FLT', c.launch, 'var(--orange)', 'Launch'], ['GND', c.ops, 'var(--sand)', 'Operations and antenna time']];
+    var tot = spend.reduce(function (s, x) { return s + x[1]; }, 0);
+    var spendBar = '<div class="spend">' + spend.map(function (x) { return '<i style="width:' + (x[1] / tot * 100).toFixed(1) + '%;background:' + x[2] + '" title="' + x[3] + '"></i>'; }).join('') + '</div><div class="legend">' + spend.map(function (x) { return '<span><i style="background:' + x[2] + '"></i>' + x[3] + ' $' + fmt(x[1] * c.total / tot) + 'M</span>'; }).join('') + '</div>';
+    var n = S.players.length, allGo = true, poll = '';
+    for (var i = 0; i < n; i++) { var go = !!S.go[i]; if (!go) allGo = false; var seats = E.ROLES.filter(function (r, ri) { return ri % n === i; }).map(function (r) { return r.short; }).join(' + '); poll += '<button type="button" data-act="go" data-v="' + i + '" aria-pressed="' + go + '"><b>' + (go ? 'GO' : 'NO-GO') + '</b><span>' + esc(playerName(i)) + ' · ' + seats + '</span></button>'; }
+    var can = !e.blocked && allGo;
+    var why = e.blocked ? 'Launch is blocked until the red issues are fixed.' : !allGo ? (n > 1 ? 'Every seat must call GO.' : 'Call GO when you are ready.') : 'All stations are go.';
+    var code = ''; try { code = btoa(unescape(encodeURIComponent(JSON.stringify(D)))); } catch (x) { code = ''; }
+    return group('Requirements', e.reqs.filter(function (r) { return r.ok; }).length + ' of ' + e.reqs.length + ' closed', reqs) + group('Open issues', '', iss) +
+      group('500 simulated flights', src(true, 'risk model is a game estimate'), dots, 'Each dot is one flight of this exact design with different luck. The colours show where the losses happen, which tells you where margin would help most.') +
+      group('Where the money goes', '$' + fmt(c.total) + 'M of ' + (e.sandbox ? 'no cap' : '$' + fmt(e.budget) + 'M'), spendBar) +
+      group('Go / no-go poll', '', '<div class="poll">' + poll + '</div><div class="launchrow" style="margin-top:6px"><button type="button" class="btn primary" data-act="launch"' + (can ? '' : ' disabled') + '>LAUNCH</button><span class="mute">' + why + '</span></div>') +
+      group('Save or share this design', '', '<div class="code"><input type="text" id="code" aria-label="Design code" value="' + code + '"><button type="button" class="btn small" data-act="copy">Copy code</button><button type="button" class="btn small" data-act="load">Load code</button><span class="toast" id="toast">' + esc(S.toast) + '</span></div>', 'Copy the code to send this design to a teammate, or paste one here and load it.');
+  }
+  var BODY = { objective: stepObjective, route: stepRoute, spacecraft: stepSpacecraft, payload: stepPayload, comms: stepComms, launch: stepLaunch, review: stepReview };
+
+  function design() {
+    var e = ev(), st = STEPS[S.step], d = e.d;
+    var marks = {}; e.issues.forEach(function (i) { var s = AREA_STEP[i.area]; if (i.level === 'info' || s == null) return; if (i.level === 'block' || !marks[s]) marks[s] = i.level === 'block' ? 'bad' : (marks[s] || 'warn'); });
+    var rail = '<nav class="rail" aria-label="Design steps"><div class="head"><div class="mname">' + d.name + '</div><div class="cml" title="Concept Maturity Level, the JPL scale for how developed a mission concept is">' + st.cml + '</div></div>' + STEPS.map(function (s, i) {
+      return '<button type="button" class="stepbtn" data-act="step" data-v="' + i + '"' + (i === S.step ? ' aria-current="step"' : '') + '><span class="n">' + (i + 1) + '</span><span class="t">' + s.title + '<span class="s">' + s.seg + '</span></span>' + (marks[i] ? '<span class="dot ' + marks[i] + '" title="Open issue in this step"></span>' : '<span></span>') + '</button>';
+    }).join('') + '</nav>';
+    var own = '';
+    if (st.role) { var ri = roleOf(st.role), r = E.ROLES[ri]; own = '<div class="owner"><span class="tagrole r-' + r.id + '">' + r.short + '</span><span>' + r.name + (S.players.length > 1 ? ' · ' + esc(playerName(ri)) + ' decides' : '') + '</span></div>'; }
+    var head = '<div class="stephead"><div><h2>' + st.title + '</h2><p class="why">' + st.why + '</p></div>' + own + '</div>';
+    var nav = '<div class="navrow">' + (S.step > 0 ? '<button type="button" class="btn" data-act="step" data-v="' + (S.step - 1) + '">Back</button>' : '<span></span>') + (S.step < STEPS.length - 1 ? '<button type="button" class="btn primary" data-act="step" data-v="' + (S.step + 1) + '">Next: ' + STEPS[S.step + 1].title + '</button>' : '') + '</div>';
+    return '<div class="console">' + rail + '<main class="main" id="main">' + head + BODY[st.id](e) + nav + '</main><aside class="tele" id="tele" aria-label="Live telemetry">' + tele(e) + '</aside></div>';
+  }
+
+  /* ---------- modals ---------- */
+  function modal() {
+    var body = '';
+    if (S.modal === 'glossary') body = '<h2>Glossary</h2><dl>' + [
+      ['Signal delay (one-way light time)', 'Radio travels at the speed of light, 299,792 km every second. Mars is far enough that a command takes 3 to 22 minutes to arrive, and the answer takes as long to come back.'],
+      ['Δv (delta-v)', 'The total change in speed a spacecraft can make with its propellant, in metres per second. Every manoeuvre spends some. It is the currency of spaceflight.'],
+      ['C3 (launch energy)', 'How much energy the rocket gives the spacecraft beyond what is needed to escape Earth, in km²/s². Mars needs about 9, Jupiter about 77 for a direct flight.'],
+      ['Specific impulse (Isp)', 'The fuel economy of a rocket engine, in seconds. A 315 s engine gets about 40% more Δv from the same propellant as a 225 s engine.'],
+      ['The rocket equation', 'Δv = Isp × g₀ × ln(fuelled mass ÷ dry mass). Because of the logarithm, doubling the Δv needs far more than double the propellant.'],
+      ['Margin', 'Spare capacity held back for surprises. Review boards expect roughly 10% or more on mass, fuel and power. Too little is dangerous; far too much is wasted science.'],
+      ['Growth allowance', 'Spacecraft get heavier as the design matures. Early concepts add 30% to the estimated dry mass to allow for it.'],
+      ['Link budget', 'The sum that gives the data rate: transmitter power, both antenna sizes and distance. Rate falls with the square of distance.'],
+      ['Deep Space Network (DSN)', 'NASA’s three ground complexes in California, Spain and Australia, with 34 m and 70 m dishes. Missions book and pay for time on them.'],
+      ['Eclipse and depth of discharge', 'In a planet’s shadow solar arrays make nothing. Batteries last longest when only part of their capacity is used each cycle; this game allows 30%.'],
+      ['RTG', 'A radioisotope thermoelectric generator turns the heat of decaying plutonium into electricity. It works anywhere, costs a great deal and fades slowly.'],
+      ['Concept Maturity Level (CML)', 'JPL’s scale for how developed a mission idea is, from CML 1, a sketch on a napkin, to CML 4, a single worked-out point design.'],
+      ['The four segments', 'NASA divides a mission into the launch segment (the rocket), the space segment (spacecraft and instruments), the ground segment (antennas and control) and the user segment (the scientists who use the data).']
+    ].map(function (g) { return '<div><dt>' + g[0] + '</dt><dd>' + g[1] + '</dd></div>'; }).join('') + '</dl>';
+    if (S.modal === 'sources') body = '<h2>Data sources</h2><p>Every number in the game is one of three kinds. Tags beside each group show which.</p><ul>' +
+      '<li>' + src(false) + ' Planet distances, gravity, radii and sunlight: <a href="https://nssdc.gsfc.nasa.gov/planetary/factsheet/">NASA Planetary Fact Sheet</a>. Solar constant 1,361 W/m². Earth–Moon distance 384,400 km.</li>' +
+      '<li>' + src(false) + ' Reference missions MAVEN, OSIRIS-REx, LRO, Juno and Magellan: published launch mass, dry mass, launch vehicle and cost from NASA mission pages.</li>' +
+      '<li>' + src(false) + ' Communications anchor: Mars Reconnaissance Orbiter telecom (JPL DESCANSO), 34 m against 70 m gain from the DSN handbook, DSN aperture fee of $1,057 an hour base rate.</li>' +
+      '<li>' + src(false) + ' MMRTG output of about 110 W and 45 kg: NASA fact sheet. LCROSS rideshare limit of 1,000 kg on LRO’s launch.</li>' +
+      '<li>' + src(false, 'computed') + ' Transfers use Hohmann and vis-viva equations with circular, coplanar orbits. The model gives C3 8.7 and 259 days for Mars and 542 m/s for Juno’s orbit insertion, matching the flown values.</li>' +
+      '<li>' + src(true) + ' Launch vehicle curves follow the shape of <a href="https://elvperf.ksc.nasa.gov/">NASA Launch Services Program</a> data, anchored so MAVEN fits Atlas V 401, OSIRIS-REx fits 411 and Juno fits 551. Treat them as approximate.</li>' +
+      '<li>' + src(true) + ' All prices, cost caps, deadlines, failure rates, the Bennu rendezvous burns and science point values are game estimates chosen to keep the trade-offs realistic.</li></ul>' +
+      '<p>Mission structure follows NASA’s <a href="https://www.nasa.gov/wp-content/uploads/2025/04/250323-design-and-develop-science-mission.pdf?emrc=a454cf">Design and Develop Science Missions</a> (four segments), JPL’s <a href="https://dataverse.jpl.nasa.gov/dataset.xhtml?persistentId=hdl:2014/44299">Concept Maturity Levels</a>, Goddard’s <a href="https://etd.gsfc.nasa.gov/capabilities/integrated-design-center/mission-design-lab/">Mission Design Lab</a> and <a href="https://www3.nasa.gov/sites/default/files/atoms/files/nasa_csli_cubesat_101_508.pdf">CubeSat 101</a>. For real trajectory work, use <a href="https://sourceforge.net/projects/gmat/">GMAT</a>.</p><p class="mute">Crisis events retell Mars Climate Orbiter (1999), SOHO (1998), Galileo (1991), Akatsuki (2010) and Spirit (2004).</p>';
+    if (S.modal === 'board') { var b = board(); body = '<h2>Leaderboard</h2>' + (b.length ? '<div class="scroll"><table class="table"><thead><tr><th>#</th><th>Team</th><th>Mission</th><th>Mode</th><th class="r">Score</th></tr></thead><tbody>' + b.map(function (r, i) { return '<tr><td class="num">' + (i + 1) + '</td><td>' + esc(r.team) + '</td><td>' + esc(r.mission) + '</td><td>' + esc(r.mode) + '</td><td class="r num">' + r.score + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="mute">No flights yet. Fly a mission to post a score.</p>') + '<p class="mute" style="font-size:12px">Scores are kept in this browser.</p>'; }
+    return '<div class="modal" data-act="close" role="dialog" aria-modal="true"><div class="modal-card" data-stop="1">' + body + '<div><button type="button" class="btn small" data-act="close">Close</button></div></div></div>';
+  }
+
+  /* ---------- render ---------- */
+  function render(keepScroll) {
+    document.body.className = S.mode;
+    var y = window.scrollY, html = bar();
+    if (S.screen === 'home') html += home();
+    else if (S.screen === 'design') html += design();
+    else if (S.screen === 'flight') html += UI.flightView();
+    else if (S.screen === 'debrief') html += UI.debriefView();
+    if (S.modal) html += modal();
+    app.innerHTML = html;
+    if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
+    if (S.screen === 'design' && STEPS[S.step].id === 'route') UI.drawPlot($('#plot'), ev());
+    if (S.screen === 'flight') UI.flightMount();
+    persist();
+  }
+  UI.render = render;
+  function live() { // slider drag: refresh numbers without rebuilding the control in use
+    var e = ev(), D = S.design, t = $('#tele'); if (t) t.innerHTML = tele(e);
+    var o;
+    if ((o = $('#out-years'))) o.textContent = D.years + (D.years === 1 ? ' year' : ' years');
+    if ((o = $('#out-solarM2'))) o.textContent = D.solarM2 + ' m² → ' + fmt(e.pSolar) + ' W';
+    if ((o = $('#out-hours'))) o.textContent = D.hours + ' h a day';
+    if ((o = $('#out-propKg'))) o.textContent = fmt(D.propKg) + ' kg → ' + fmt(e.dvAvail) + ' m/s';
+  }
+
+  /* ---------- home lanes: three pulses in real time ---------- */
+  var t0 = Date.now();
+  function lanes() {
+    if (S.screen === 'home') {
+      var el = document.querySelectorAll('.lane');
+      for (var i = 0; i < el.length; i++) {
+        var T = +el[i].getAttribute('data-lane'), t = ((Date.now() - t0) / 1000) % T, p = $('#pulse-' + i), l = $('#lane-' + i);
+        if (p) p.style.left = 'calc(6px + (100% - 12px) * ' + (t / T).toFixed(4) + ')';
+        if (l) l.textContent = T < 5 ? 'There and back before you finish reading this line.' : 'Left Earth ' + dur(t) + ' ago. Arrives in ' + dur(T - t) + '.';
+      }
+    }
+    requestAnimationFrame(lanes);
+  }
+
+  /* ---------- events ---------- */
+  function setMode(m) {
+    if (S.mode === m) return; S.mode = m;
+    if (S.design) { if (m === 'engineer') { var e = E.evaluate(S.design, { mode: 'cadet', sandbox: S.sandbox }); S.design.propKg = Math.min(6000, e.propKg >= 99999 ? 6000 : e.propKg); S.design.autoFuel = false; } else { S.design.autoFuel = true; S.design.schedule = 'std'; S.design.hours = 8; if (S.design.prop === 'ion') S.design.prop = 'biprop'; } }
+  }
+  document.addEventListener('click', function (x) {
+    var el = x.target.closest('[data-act]'); if (!el) return;
+    var act = el.getAttribute('data-act'), v = el.getAttribute('data-v'), k = el.getAttribute('data-k'), D = S.design;
+    if (act === 'close') { if (x.target.closest('[data-stop]') && el.classList.contains('modal')) return; S.modal = null; return render(true); }
+    if (el.tagName === 'INPUT') return; // checkboxes are handled on change
+    S.go = act === 'go' ? S.go : (['set', 'inst', 'extra', 'rtg'].indexOf(act) >= 0 ? {} : S.go);
+    switch (act) {
+      case 'home': UI.flightStop(); S.screen = 'home'; return render();
+      case 'resume': S.screen = 'design'; return render();
+      case 'mode': setMode(v); return render(true);
+      case 'players': var n = +v; while (S.players.length < n) S.players.push(''); S.players.length = n; S.go = {}; return render(true);
+      case 'start': S.design = E.defaultDesign(v, S.mode); S.step = 0; S.go = {}; S.history = []; S.screen = 'design'; return render();
+      case 'step': S.step = +v; S.toast = ''; return render();
+      case 'set': D[k] = v; if (k === 'objective' && v === 'samp') { D.orbit = 'tag'; if (D.instruments.indexOf('tagsam') < 0) D.instruments.push('tagsam'); if (D.adcs !== 'precise') D.adcs = 'precise'; } return render(true);
+      case 'inst': var i = D.instruments.indexOf(v); if (i >= 0) D.instruments.splice(i, 1); else D.instruments.push(v); return render(true);
+      case 'extra': D.extras[v] = !D.extras[v]; return render(true);
+      case 'rtg': D.rtg = E.clamp(D.rtg + (+v), 0, 6); return render(true);
+      case 'go': S.go[v] = !S.go[v]; return render(true);
+      case 'launch': if (!ev().blocked) UI.flightStart(); return;
+      case 'modal': S.modal = v; return render(true);
+      case 'copy': var c = $('#code'); if (c) { c.select(); try { navigator.clipboard.writeText(c.value).then(function () { S.toast = 'Copied.'; $('#toast').textContent = S.toast; }, function () { S.toast = 'Select the code and copy it.'; $('#toast').textContent = S.toast; }); } catch (err) { S.toast = 'Select the code and copy it.'; $('#toast').textContent = S.toast; } } return;
+      case 'load': try { var o = JSON.parse(decodeURIComponent(escape(atob($('#code').value.trim())))); if (!E.DEST[o.dest] || !Array.isArray(o.instruments)) throw 0; var base = E.defaultDesign(o.dest, S.mode); Object.keys(base).forEach(function (kk) { if (o[kk] != null) base[kk] = o[kk]; }); S.design = base; S.toast = 'Design loaded.'; } catch (err) { S.toast = 'That code is not a valid design.'; } return render(true);
+      default: if (UI.flightAct) UI.flightAct(act, v, el);
+    }
+  });
+  document.addEventListener('input', function (x) {
+    var el = x.target;
+    if (el.matches('input[type="range"][data-k]')) { S.design[el.getAttribute('data-k')] = +el.value; S.go = {}; live(); }
+    if (el.hasAttribute('data-player')) { S.players[+el.getAttribute('data-player')] = el.value; persist(); }
+    if (el.hasAttribute('data-team')) { S.team = el.value; persist(); }
+  });
+  document.addEventListener('change', function (x) {
+    var el = x.target, act = el.getAttribute && el.getAttribute('data-act');
+    if (el.matches('input[type="range"][data-k]')) return render(true);
+    if (act === 'sandbox') { S.sandbox = el.checked; return render(true); }
+    if (act === 'autofuel') { var e = ev(); if (!el.checked) S.design.propKg = Math.min(6000, e.propKg >= 99999 ? 6000 : e.propKg); S.design.autoFuel = el.checked; return render(true); }
+    if (el.hasAttribute('data-player')) return render(true);
+  });
+  document.addEventListener('keydown', function (x) { if (x.key === 'Escape' && S.modal) { S.modal = null; render(true); } });
+
+  /* ---------- boot ---------- */
+  UI.boot = function (snap) { restore(snap); render(); requestAnimationFrame(lanes); };
+})();
+
+</script>
+<script>
+/* Signal Delay — flight simulation, crisis events and debrief. */
+(function () {
+  'use strict';
+  var UI = window.SDUI, E = UI.E, S = UI.S, fmt = E.fmt, esc = UI.esc, dur = UI.dur, days = UI.days, pct = UI.pct;
+  var $ = function (s) { return document.querySelector(s); };
+  var F = null, raf = 0;
+  var COL = { cyan: '#00D2FF', blue: '#0099FF', orange: '#FF9900', amber: '#FFAE00', sand: '#D49B6A', tan: '#C68B59', mute: '#9DB2CF', white: '#FFFFFF', navy: '#0B1D3A', bad: '#FF5D6C' };
+  var BODYCOL = { moon: '#C9D6E8', venus: '#D49B6A', mars: '#E0703A', bennu: '#6F7F99', jupiter: '#D49B6A' };
+  var SYN = { moon: 0.0748, venus: 1.6, mars: 2.14, bennu: 6, jupiter: 1.09 };
+  var starRng = E.mulberry32(11), STARS = []; for (var i = 0; i < 160; i++) STARS.push([starRng(), starRng(), 0.2 + starRng() * 0.7]);
+
+  /* ---------- the path a spacecraft follows, for drawing and for the live signal delay ---------- */
+  function pathModel(D, e) {
+    var d = e.d, id = e.tr.id;
+    if (D.dest === 'moon') {
+      var low = id === 'lowenergy', end = low ? Math.PI * 1.25 : Math.PI, ec0 = (1 - 0.06) / (1 + 0.06), p0 = 0.06 * (1 + ec0);
+      return { geo: true, max: low ? 2.9 : 1.2, r2: 1, at: function (f) { var th = f * end, r = low ? (1 - f) * 0.06 + f + 2.1 * Math.sin(Math.PI * f) : p0 / (1 + ec0 * Math.cos(th)); var mt = end - (1 - f) * (e.tr.tof / 27.3) * 2 * Math.PI; return { s: [r * Math.cos(th), r * Math.sin(th)], e: [0, 0], t: [Math.cos(mt), Math.sin(mt)] }; }, km: function (p) { return Math.hypot(p.s[0], p.s[1]) * 384400; } };
+    }
+    var r2 = d.sunAU, tofY = e.tr.tof / 365.25, out = r2 > 1, FAR = { mars: 1.15, venus: 1.12 };
+    function conic(X) {
+      var ec, p;
+      if (out) { ec = (X - 1) / (X + 1); p = 1 + ec; return { sweep: Math.abs(X - r2) < 1e-9 ? Math.PI : Math.acos(E.clamp((p / r2 - 1) / ec, -1, 1)), r: function (th) { return p / (1 + ec * Math.cos(th)); } }; }
+      ec = (1 - X) / (1 + X); p = X * (1 + ec); return { sweep: Math.abs(X - r2) < 1e-9 ? Math.PI : Math.acos(E.clamp((1 - p / r2) / ec, -1, 1)), r: function (th) { return p / (1 - ec * Math.cos(th)); } };
+    }
+    var loop = id === 'ega' ? { ap: 2.3, revs: 2, years: 2.17 } : id === 'flyby' ? { ap: 1.25, revs: 1, years: 1.0 } : null;
+    var leg = conic(id === 'fast' && FAR[D.dest] ? (out ? r2 * FAR[D.dest] : r2 / FAR[D.dest]) : r2);
+    var fA = loop ? loop.years / tofY : 0, legY = tofY - (loop ? loop.years : 0), nT = 2 * Math.PI / Math.pow(r2, 1.5);
+    return { geo: false, max: Math.max(r2, loop ? loop.ap : 0, 1) * 1.1, r2: r2, fA: fA, at: function (f) {
+      var th, r, eth, g;
+      if (loop && f < fA) { g = f / fA; th = g * 2 * Math.PI; var ec = (loop.ap - 1) / (loop.ap + 1); r = (1 + ec) / (1 + ec * Math.cos(th)); eth = g * loop.revs * 2 * Math.PI; }
+      else { g = loop ? (f - fA) / (1 - fA) : f; th = g * leg.sweep; r = leg.r(th); eth = g * legY * 2 * Math.PI; }
+      var tth = leg.sweep - nT * tofY * (1 - f);
+      return { s: [r * Math.cos(th), r * Math.sin(th)], e: [Math.cos(eth), Math.sin(eth)], t: [r2 * Math.cos(tth), r2 * Math.sin(tth)] };
+    }, km: function (p) { return Math.hypot(p.s[0] - p.e[0], p.s[1] - p.e[1]) * E.K.AU; } };
+  }
+
+  /* ---------- canvas scenes ---------- */
+  function fit(cv) { var r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); } var c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); return { c: c, w: r.width, h: r.height }; }
+  function stars(c, w, h) { c.fillStyle = '#060F1C'; c.fillRect(0, 0, w, h); for (var i = 0; i < STARS.length; i++) { c.globalAlpha = STARS[i][2]; c.fillStyle = '#fff'; c.fillRect(STARS[i][0] * w, STARS[i][1] * h, 1.2, 1.2); } c.globalAlpha = 1; }
+  function dot(c, x, y, r, col, glow) { c.save(); if (glow) { c.shadowColor = col; c.shadowBlur = glow; } c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.restore(); }
+  function label(c, t, x, y, col, align) { c.font = '11px JetBrains Mono, monospace'; c.fillStyle = col || COL.mute; c.textAlign = align || 'left'; c.fillText(t, x, y); }
+  function drawTransfer(c, w, h, M, f, dest, time) {
+    stars(c, w, h);
+    var cx = w / 2, cy = h / 2, sc = (Math.min(w, h) / 2 - 26) / M.max;
+    function X(p) { return cx + p[0] * sc; } function Y(p) { return cy - p[1] * sc; }
+    c.lineWidth = 1; c.setLineDash([]);
+    if (M.geo) { c.strokeStyle = 'rgba(201,214,232,.35)'; c.beginPath(); c.arc(cx, cy, sc, 0, 7); c.stroke(); dot(c, cx, cy, 9, COL.blue, 14); label(c, 'Earth', cx + 13, cy + 4); }
+    else { c.strokeStyle = 'rgba(0,153,255,.45)'; c.beginPath(); c.arc(cx, cy, sc, 0, 7); c.stroke(); c.strokeStyle = 'rgba(212,155,106,.45)'; c.beginPath(); c.arc(cx, cy, M.r2 * sc, 0, 7); c.stroke(); dot(c, cx, cy, 7, COL.amber, 22); label(c, 'Sun', cx + 11, cy + 4); }
+    var n = 240, k, p;
+    c.strokeStyle = 'rgba(0,210,255,.3)'; c.setLineDash([4, 5]); c.beginPath();
+    for (k = 0; k <= n; k++) { p = M.at(k / n).s; if (k) c.lineTo(X(p), Y(p)); else c.moveTo(X(p), Y(p)); } c.stroke();
+    c.setLineDash([]); c.strokeStyle = COL.cyan; c.lineWidth = 2; c.beginPath();
+    var m = Math.max(1, Math.round(n * f)); for (k = 0; k <= m; k++) { p = M.at(Math.min(f, k / n)).s; if (k) c.lineTo(X(p), Y(p)); else c.moveTo(X(p), Y(p)); } c.stroke();
+    var q = M.at(f);
+    if (!M.geo) { dot(c, X(q.e), Y(q.e), 6, COL.blue, 10); label(c, 'Earth', X(q.e) + 9, Y(q.e) - 7); }
+    dot(c, X(q.t), Y(q.t), dest === 'jupiter' ? 9 : 6, BODYCOL[dest], 8); label(c, E.DEST[dest].name, X(q.t) + 11, Y(q.t) - 7);
+    // the signal: Earth to spacecraft
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1; c.setLineDash([2, 4]); c.beginPath(); c.moveTo(X(q.e), Y(q.e)); c.lineTo(X(q.s), Y(q.s)); c.stroke(); c.setLineDash([]);
+    if (time != null) { var u = (time * 0.35) % 1; dot(c, X(q.e) + (X(q.s) - X(q.e)) * u, Y(q.e) + (Y(q.s) - Y(q.e)) * u, 2.5, COL.white, 8); }
+    dot(c, X(q.s), Y(q.s), 4.5, COL.cyan, 16);
+    if (M.fA && f < 1) { var fb = M.at(M.fA); label(c, 'Earth flyby', X(fb.s) + 8, Y(fb.s) + 14, COL.amber); }
+  }
+  function drawLaunch(c, w, h, p) {
+    stars(c, w, h);
+    var g = c.createRadialGradient(w / 2, h + w * 0.9, w * 0.85, w / 2, h + w * 0.9, w * 1.02); g.addColorStop(0, '#0B3A7A'); g.addColorStop(0.9, COL.blue); g.addColorStop(1, 'rgba(0,153,255,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(w / 2, h + w * 0.9, w * 1.02, 0, 7); c.fill();
+    var x = w * 0.3 + p * w * 0.42, y = h * 0.82 - Math.pow(p, 0.8) * h * 0.66;
+    c.strokeStyle = 'rgba(255,174,0,.5)'; c.lineWidth = 3; c.beginPath(); for (var k = 0; k <= 30; k++) { var pp = p * k / 30, xx = w * 0.3 + pp * w * 0.42, yy = h * 0.82 - Math.pow(pp, 0.8) * h * 0.66; if (k) c.lineTo(xx, yy); else c.moveTo(xx, yy); } c.stroke();
+    var hd = Math.atan2(-0.528 * h * Math.pow(Math.max(p, 0.02), -0.2), 0.42 * w); c.save(); c.translate(x, y); c.rotate(hd + Math.PI / 2); c.fillStyle = COL.white; c.fillRect(-4, -16, 8, 26); c.beginPath(); c.moveTo(-4, -16); c.lineTo(0, -26); c.lineTo(4, -16); c.fill(); c.fillStyle = COL.orange; c.shadowColor = COL.orange; c.shadowBlur = 18; c.beginPath(); c.moveTo(-4, 10); c.lineTo(0, 24 + Math.random() * 8); c.lineTo(4, 10); c.fill(); c.restore();
+  }
+  function drawOrbit(c, w, h, e, dest, t, science) {
+    stars(c, w, h);
+    var cx = w * 0.56, cy = h * 0.5, R = dest === 'bennu' ? 20 : dest === 'jupiter' ? 60 : 44, o = e.orb;
+    var q = o.fixedDv != null ? 1 : (e.d.R + o.ha) / (e.d.R + o.hp), per = R + 22, apo = per * Math.min(3.1, 1 + Math.log10(q) * 1.5), a = (per + apo) / 2, ec = (apo - per) / (apo + per), b = a * Math.sqrt(1 - ec * ec);
+    if (dest === 'bennu') { c.fillStyle = BODYCOL.bennu; c.beginPath(); for (var k = 0; k < 9; k++) { var an = k / 9 * 6.283, rr = R * (0.82 + 0.25 * Math.sin(k * 2.3)); if (k) c.lineTo(cx + rr * Math.cos(an), cy + rr * Math.sin(an)); else c.moveTo(cx + rr * Math.cos(an), cy + rr * Math.sin(an)); } c.closePath(); c.fill(); }
+    else { var g = c.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R); g.addColorStop(0, '#FFE9CF'); g.addColorStop(0.35, BODYCOL[dest]); g.addColorStop(1, '#1b2436'); c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.fill(); if (dest === 'jupiter') { c.save(); c.beginPath(); c.arc(cx, cy, R, 0, 7); c.clip(); c.globalAlpha = 0.35; c.fillStyle = COL.tan; for (var s = -3; s <= 3; s += 2) c.fillRect(cx - R, cy + s * R / 4.2 - 5, R * 2, 9); c.restore(); } }
+    c.strokeStyle = 'rgba(0,210,255,.5)'; c.lineWidth = 1.2; c.beginPath(); c.ellipse(cx + (a - per), cy, a, b, 0, 0, 7); c.stroke();
+    // Kepler's equation so the spacecraft speeds up at periapsis
+    var Mn = (t * 0.9) % 6.283, En = Mn; for (var it = 0; it < 6; it++) En = En - (En - ec * Math.sin(En) - Mn) / (1 - ec * Math.cos(En));
+    var sx = cx + (a - per) - a * Math.cos(En), sy = cy - b * Math.sin(En);
+    var ex = 26, ey = h - 30; dot(c, ex, ey, 6, COL.blue, 10); label(c, 'to Earth', ex + 12, ey + 4);
+    c.strokeStyle = 'rgba(255,255,255,.25)'; c.setLineDash([2, 5]); c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.stroke(); c.setLineDash([]);
+    if (science) for (var j = 0; j < 3; j++) { var u = ((t * 0.3) + j / 3) % 1; dot(c, sx + (ex - sx) * u, sy + (ey - sy) * u, 2.2, COL.cyan, 8); }
+    dot(c, sx, sy, 4.5, COL.cyan, 16);
+    label(c, E.DEST[dest].name + ' · ' + o.name, w - 14, h - 14, COL.mute, 'right');
+  }
+  UI.drawPlot = function (cv, e) { if (!cv) return; var v = fit(cv); drawTransfer(v.c, v.w, v.h, pathModel(S.design, e), 1, S.design.dest, null); };
+
+  /* ---------- crisis cards, each retelling a real event ---------- */
+  function rt(x) { return dur(2 * x.owlt); }
+  var CARDS = {
+    mco: { phase: 'cruise', title: 'The trajectory does not add up', real: 'Mars Climate Orbiter, 1999. One team sent thruster data in pound-seconds, another read it as newton-seconds. Navigators saw small discrepancies for months. The spacecraft arrived 170 km too low and was destroyed.',
+      text: function () { return 'Two navigation solutions disagree by a few kilometres and the gap is growing. Nobody can say which is right.'; },
+      hint: function () { return 'Small unexplained errors are how big failures announce themselves. The check costs little compared with the mission.'; },
+      options: [
+        { label: 'Order an independent navigation check, then burn', detail: 'Costs $4M and 25 m/s of fuel.', odds: 'Always works', run: function (x) { x.F.extraCost += 4; x.F.dvExtra += 25; return { grade: 100, tone: 'good', text: 'A second team reruns the numbers and finds a unit mismatch between two software files. A 25 m/s burn puts you back on course.' }; } },
+        { label: 'Fly a small correction now and move on', detail: 'Costs 10 m/s of fuel.', odds: '70% enough', ground: true, run: function (x) { x.F.dvExtra += 10; if (x.rng() < 0.3) { x.F.arrMult *= 2; return { grade: 50, tone: 'warn', text: 'The burn helps, but the cause is still in the software. Arrival will be twice as risky.' }; } return { grade: 80, tone: 'good', text: 'The small burn was enough this time.' }; } },
+        { label: 'Trust the main trajectory solution', detail: 'Free.', odds: '50% fine', run: function (x) { if (x.rng() < 0.5) { x.F.arrMult *= 3.5; return { grade: 10, tone: 'bad', text: 'Nobody finds the mix-up. The spacecraft is heading for a closest approach far lower than planned.' }; } return { grade: 55, tone: 'warn', text: 'The discrepancy turns out to be noise. You were lucky, and you learned nothing.' }; } }
+      ] },
+    soho: { phase: 'cruise', title: 'The spacecraft is tumbling', real: 'SOHO, 1998. A faulty command sequence left the observatory spinning with its arrays edge-on to the Sun. Contact was lost for six weeks. Engineers found it by radar and thawed its frozen fuel to save it.',
+      text: function (x) { return 'A gyro fault has put the spacecraft into a slow spin. The arrays are off the Sun and the battery is draining. A command and its reply take ' + rt(x) + '.'; },
+      hint: function (x) { return x.D.extras.autonomy ? 'You bought the autonomy package for exactly this. It acts in seconds; Earth cannot.' : 'Without autonomy, everything depends on how long your battery lasts against the signal delay. A generator keeps power on whatever the attitude.'; },
+      options: [
+        { label: 'Let onboard autonomy recover', detail: function (x) { return x.D.extras.autonomy ? 'Acts within seconds. No round trip needed.' : 'Needs the autonomy package.'; }, odds: '97%', need: function (x) { return !!x.D.extras.autonomy; }, run: function (x) { if (x.rng() < 0.97) return { grade: 100, tone: 'good', text: 'Fault protection stops the spin, finds the Sun and calls home. It took four minutes. Earth hears about it ' + dur(x.owlt) + ' later.' }; x.F.extraCost += 10; x.F.opsMult *= 1.3; return { grade: 70, tone: 'warn', text: 'Autonomy stabilises the spacecraft but a wheel is damaged. Operations will be harder.' }; } },
+        { label: 'Send a recovery sequence from Earth', detail: 'Each try takes a full round trip.', ground: true, odds: function (x) { return pct(pGround(x)); }, run: function (x) { if (x.rng() < pGround(x)) return { grade: 85, tone: 'good', text: 'The commands arrive with the battery at 11%. The spin stops and the arrays find the Sun.' }; x.F.extraCost += 15; x.F.dvExtra += 40; x.F.extraYears += 0.25; x.F.opsMult *= 1.3; return { grade: 30, tone: 'bad', text: 'The battery died before the commands arrived. Three months later the antennas catch a faint carrier, and the team nurses the spacecraft back. It cost $15M, 40 m/s and a quarter of a year.' }; } },
+        { label: 'Wait for the spin to bring the arrays round', detail: 'Free, and out of your hands.', odds: function (x) { return x.D.rtg > 0 ? '90%' : '45%'; }, run: function (x) { if (x.rng() < (x.D.rtg > 0 ? 0.9 : 0.45)) { x.F.extraYears += 0.15; return { grade: 45, tone: 'warn', text: (x.D.rtg > 0 ? 'The generators keep the computer alive whatever the attitude. ' : 'Sunlight sweeps across the arrays often enough. ') + 'Weeks later it stabilises on its own.' }; } x.F.lose('cruise', 'The battery ran flat while the spacecraft tumbled and the computer never restarted.'); return { grade: 0, tone: 'bad', text: 'The battery runs flat. The computer never restarts.' }; } }
+      ] },
+    galileo: { phase: 'cruise', title: 'The dish will not open', real: 'Galileo, 1991. Its 4.8 m umbrella antenna jammed half-open on the way to Jupiter. The team rewrote the flight software for heavy data compression and arrayed ground antennas, and still returned about 70% of the planned science through a low-gain antenna.',
+      text: function () { return 'The high-gain antenna deployment has stalled. Three ribs are stuck. On the low-gain antenna the data rate is a tiny fraction of the plan.'; },
+      hint: function (x) { return 'Shaking it loose almost never works. Planning around the fault is slower and surer' + (x.D.extras.compress ? ', and your compression software makes it cheaper.' : '.'); },
+      options: [
+        { label: 'Keep trying to free it', detail: 'Heat it, cool it, hammer the motors.', odds: '20%', ground: true, run: function (x) { if (x.rng() < 0.2) return { grade: 75, tone: 'good', text: 'On the fourth thermal cycle the ribs pop free. Full data rate restored.' }; x.F.sciMult *= 0.35; return { grade: 25, tone: 'bad', text: 'It stays stuck. With no plan B prepared, most of the data never comes home.' }; } },
+        { label: 'Redesign the mission around the low-gain antenna', detail: function (x) { return 'Costs $' + (x.D.extras.compress ? 10 : 25) + 'M for new software and antenna arraying.'; }, odds: 'Always works', run: function (x) { x.F.extraCost += x.D.extras.compress ? 10 : 25; x.F.sciMult *= x.D.extras.compress ? 0.8 : 0.65; return { grade: 95, tone: 'good', text: 'New compression and arrayed 70 m antennas recover ' + (x.D.extras.compress ? '80' : '65') + '% of the science. Slower, and enough.' }; } }
+      ] },
+    akatsuki: { phase: 'arrival', title: 'Engine valve reads wrong', real: 'Akatsuki, 2010. A blocked valve made the main engine overheat and shut down during Venus orbit insertion. The spacecraft flew past, circled the Sun for five years, and entered orbit in 2015 on its small attitude thrusters.',
+      text: function (x) { return 'Hours before the braking burn, a pressure reading on the main engine is out of family. The burn happens behind the planet. You will know if it worked ' + dur(x.owlt) + ' after it ends.'; },
+      hint: function (x) { return x.margin >= 0.15 ? 'You have the fuel margin to use the thrusters. It is slow and wasteful, and it is safe.' : 'The thrusters need 15% more fuel than the main engine. Check whether your margin covers it.'; },
+      options: [
+        { label: 'Burn on the main engine as planned', detail: 'Uses no extra fuel.', odds: function (x) { return x.D.prop === 'biprop' ? '60%' : '75%'; }, run: function (x) { if (x.rng() < (x.D.prop === 'biprop' ? 0.4 : 0.25)) { x.F.extraYears += 3; x.F.sciMult *= 0.6; x.F.extraCost += 45; return { grade: 15, tone: 'bad', text: 'The engine shuts down two minutes in. The spacecraft sails past and into orbit around the Sun. It will get one more chance, three years from now, on thrusters, into a much higher orbit.' }; } return { grade: 70, tone: 'good', text: 'The engine burns for the full duration. The odd reading was a sensor.' }; } },
+        { label: 'Switch to the small thrusters', detail: 'A longer, less efficient burn: 15% more fuel.', odds: function (x) { return x.margin >= 0.15 * x.capShare ? 'Works: margin covers it' : 'Margin too thin'; }, run: function (x) { var extra = 0.15 * x.ev.dv.capture * x.ev.dv.lowF; x.F.dvExtra += extra; if (x.ev.dvAvail - x.F.dvExtra >= x.ev.dv.total) return { grade: 100, tone: 'good', text: 'The thrusters fire for forty minutes. It costs ' + fmt(extra) + ' m/s more than planned, and your margin absorbs it.' }; x.F.dvExtra -= extra; x.F.sciMult *= 0.6; return { grade: 55, tone: 'warn', text: 'There is not enough fuel for the inefficient burn. The spacecraft is captured into a much higher orbit than planned.' }; } }
+      ] },
+    spirit: { phase: 'ops', title: 'The computer keeps rebooting', real: 'Spirit rover, 2004. Eighteen days after landing, its flash file system filled with old files and the computer began resetting dozens of times a day. Engineers diagnosed it across the signal delay, deleted files and reformatted the memory.',
+      text: function (x) { return 'The flight computer has reset 60 times since yesterday. The data recorder is nearly full. Each diagnostic step is one command and one reply: ' + rt(x) + '.'; },
+      hint: function (x) { return x.owlt > 600 ? 'At this distance a careful diagnosis means hours between steps while the battery cycles. A reformat is blunt and quick.' : 'The delay is short enough here to diagnose step by step.'; },
+      options: [
+        { label: 'Reformat the memory now', detail: 'Loses everything not yet sent home.', odds: 'Always works', run: function (x) { var big = x.ev.storageGB >= 100; x.F.sciMult *= big ? 0.92 : 0.95; return { grade: 80, tone: 'good', text: 'One command, one clean file system. ' + (big ? 'A large recorder meant a lot of unsent data was on it.' : 'A few days of data are gone.') }; } },
+        { label: 'Diagnose first, delete files one by one', detail: 'Costs $2M of antenna time.', ground: true, odds: function (x) { return pct(pDiag(x)); }, run: function (x) { x.F.extraCost += 2; if (x.rng() < pDiag(x)) { x.F.sciMult *= 0.99; return { grade: 100, tone: 'good', text: 'Step by step the team finds the bloated directory and clears it. Almost nothing is lost.' }; } x.F.sciMult *= 0.86; return { grade: 40, tone: 'bad', text: 'With ' + rt(x) + ' between steps the battery ran down twice before the fault was found. Two weeks of science are gone.' }; } }
+      ] },
+    storm: { phase: 'ops', title: 'Solar storm warning', real: 'Solar particle events regularly force spacecraft into safe mode. The 2003 Halloween storms knocked out the radiation instrument on Mars Odyssey for good.',
+      text: function () { return 'Space weather forecasters report a strong flare. A burst of high-energy protons will reach the spacecraft within hours.'; },
+      hint: function (x) { return x.D.computer === 'rad' || x.D.extras.vault ? 'Your hardened electronics can probably ride this out.' : 'Your electronics are not hardened. Protons can flip bits and burn out detectors.'; },
+      options: [
+        { label: 'Switch the instruments off for ten days', detail: 'Lose ten days of science.', odds: 'Always safe', run: function (x) { x.F.sciMult *= 1 - 10 / 365.25 / x.ev.years; return { grade: 85, tone: 'good', text: 'The storm passes over a sleeping spacecraft. Ten days later the instruments wake unharmed.' }; } },
+        { label: 'Keep observing through the storm', detail: function (x) { return x.ev.obj.key === 'env' ? 'This storm is the science you came for.' : 'No science lost if nothing breaks.'; }, odds: function (x) { return pct(1 - pStorm(x)) + ' unharmed'; }, run: function (x) { var p = pStorm(x); if (x.rng() < p) { x.F.sciMult *= 0.78; return { grade: 20, tone: 'bad', text: 'A proton strike burns out a detector. One instrument is lost for the rest of the mission.' }; } if (x.ev.obj.key === 'env') x.F.sciMult *= 1.06; return { grade: p <= 0.12 ? 100 : 70, tone: 'good', text: 'The electronics hold.' + (x.ev.obj.key === 'env' ? ' You recorded the whole storm from inside it.' : '') }; } }
+      ] },
+    conj: { phase: 'ops', title: 'Two weeks of silence', real: 'Solar conjunction. About every two years the Sun passes between Earth and Mars and garbles radio signals. NASA stops sending commands to its Mars spacecraft for around two weeks each time.',
+      text: function (x) { return 'The Sun is moving between you and the spacecraft. For 14 days no command can be trusted to arrive intact. The recorder holds ' + (x.ev.storageDays >= 99 ? 'more than enough' : x.ev.storageDays.toFixed(1) + ' days of data') + '.'; },
+      hint: function (x) { return x.ev.storageDays >= 14 ? 'Your recorder can hold all fourteen days. Keep working.' : 'Your recorder fills in ' + x.ev.storageDays.toFixed(1) + ' days. After that, new data overwrites old.'; },
+      options: [
+        { label: 'Stop science until the Sun moves aside', detail: 'Lose 14 days.', odds: 'Always safe', run: function (x) { x.F.sciMult *= 1 - 14 / 365.25 / x.ev.years; return { grade: x.ev.storageDays >= 14 ? 60 : 90, tone: 'good', text: 'The spacecraft idles for two weeks and resumes on schedule.' }; } },
+        { label: 'Keep recording to onboard storage', detail: 'Play it all back afterwards.', odds: function (x) { return x.ev.storageDays >= 14 ? 'Storage is large enough' : 'Storage overflows'; }, run: function (x) { if (x.ev.storageDays >= 14) return { grade: 100, tone: 'good', text: 'Fourteen days of observations wait on the recorder and play back without a gap.' }; x.F.sciMult *= 1 - (14 - x.ev.storageDays) / 365.25 / x.ev.years; if (x.rng() < 0.3) { x.F.sciMult *= 0.95; return { grade: 35, tone: 'bad', text: 'The recorder overflowed and corrupted its index. Some earlier data went with it.' }; } return { grade: 55, tone: 'warn', text: 'The recorder filled after ' + x.ev.storageDays.toFixed(1) + ' days and the rest was overwritten.' }; } }
+      ] }
+  };
+  function pGround(x) { return E.clamp(0.92 - 0.012 * (2 * x.owlt / 60) + ({ s: -0.05, m: 0.03, l: 0.08 })[x.D.battery] + (x.D.rtg > 0 ? 0.08 : 0), 0.2, 0.95); }
+  function pDiag(x) { return E.clamp((x.owlt < 300 ? 0.9 : x.owlt < 1200 ? 0.75 : 0.6) + (x.D.extras.autonomy ? 0.08 : 0), 0, 0.97); }
+  function pStorm(x) { return ({ basic: 0.4, std: 0.22, rad: 0.08 })[x.D.computer] * (x.D.extras.vault ? 0.5 : 1); }
+
+  /* ---------- flight state machine ---------- */
+  function log(text, tone, small) { F.log.unshift({ text: text, tone: tone || '', small: small || F.clock }); var el = $('#log'); if (el) el.innerHTML = logHTML(); }
+  function logHTML() { return '<h3>Flight log</h3>' + F.log.map(function (l) { return '<p class="' + l.tone + '"><small>' + esc(l.small) + '</small>' + esc(l.text) + '</p>'; }).join(''); }
+  UI.flightStart = function () {
+    var D = JSON.parse(JSON.stringify(S.design)), e = E.evaluate(D, { mode: S.mode, sandbox: S.sandbox }), seed = (Date.now() % 2147483647) | 0, rng = E.mulberry32(seed);
+    var stages = [{ id: 'launch', label: 'Launch', dur: 5 }, { id: 'cruise', label: 'Cruise', dur: 13 }, { id: 'arrival', label: e.orb.fixedDv != null ? 'Rendezvous' : 'Orbit insertion', dur: 6 }, { id: 'ops', label: 'Science', dur: 11 }];
+    if (e.orb.sample) stages.push({ id: 'return', label: 'Return', dur: 5 });
+    var pool = ['soho']; if (e.cruiseDays > 30) pool.push('mco'); if ((D.antenna === 'hga2' || D.antenna === 'hga3') && D.dest !== 'moon' && rng() < 0.5) pool.push('galileo');
+    var opsPool = ['spirit', 'storm']; if (D.dest !== 'moon') opsPool.push('conj');
+    F = UI.F = { D: D, ev: e, seed: seed, rng: rng, M: pathModel(D, e), stages: stages, i: 0, p: 0, t: 0, speed: 1, paused: false, done: false, log: [], clock: 'T−0',
+      sciMult: 1, extraCost: 0, extraYears: 0, dvExtra: 0, arrMult: 1, opsMult: 1, grades: [], events: [], survived: false, reachedOps: false, opsFrac: 0, lostAt: null, cause: '', fired: {},
+      plan: { cruise: pool[Math.floor(rng() * pool.length)], arrival: (!E.PROP[D.prop].lowThrust && e.orb.fixedDv == null && rng() < 0.5) ? 'akatsuki' : null, ops: opsPool[Math.floor(rng() * opsPool.length)] }, owlt: 0, endKm: 0, crisis: null };
+    F.hook = F.M.fA ? Math.max(0.72, F.M.fA + 0.2) : 0.55;
+    F.lose = function (phase, cause) { F.lostAt = phase; F.cause = cause; F.pendingLoss = true; };
+    S.screen = 'flight'; UI.render();
+    log(e.lv.name + ' lifts off carrying ' + fmt(e.wet) + ' kg.', '', 'T+0');
+  };
+  UI.flightStop = function () { if (raf) cancelAnimationFrame(raf); raf = 0; if (F) F.stopped = true; };
+  UI.flightView = function () {
+    if (!F) return '<div class="wrap"><p style="padding:40px 0">No flight in progress.</p></div>';
+    return '<div class="flight"><div class="phases" id="phases"></div><div class="stage"><canvas id="sky" aria-label="Live view of the flight"></canvas><div class="hud"><small>One-way light time</small><span class="big num" id="hud-owlt">0.00 s</span><small id="hud-rt">&nbsp;</small><span class="clock num" id="hud-clock"></span></div>' +
+      '<div class="ctrl"><button type="button" class="btn small" data-act="speed" id="btn-speed">Speed ×1</button><button type="button" class="btn small" data-act="skip">Skip ahead</button></div><div id="crisis"></div></div>' +
+      '<aside class="side"><div class="log" id="log">' + logHTML() + '</div><div class="panel"><h3>Flying</h3><p style="font-size:13px">' + esc(F.ev.d.name) + ' · ' + esc(F.ev.obj.title) + '</p><p class="mute" style="font-size:12px;margin-top:6px">' + fmt(F.ev.wet) + ' kg on ' + esc(F.ev.lv.name) + ' · ' + F.ev.insts.length + ' instruments · forecast ' + pct(F.ev.risk.success) + ' success</p></div></aside></div>';
+  };
+  UI.flightMount = function () { if (!F) return; F.stopped = false; F.last = 0; phases(); if (F.crisis) showCrisis(); if (F.done) endCard(); if (raf) cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); };
+  function phases() { var el = $('#phases'); if (el) el.innerHTML = F.stages.map(function (s, i) { return '<span class="phase' + (i === F.i && !F.done ? ' on' : i < F.i || F.done ? ' done' : '') + '">' + s.label + '</span>'; }).join('<span class="mute">›</span>'); }
+  function frame(ts) {
+    if (!F || F.stopped || S.screen !== 'flight') return;
+    var dt = F.last ? Math.min(0.06, (ts - F.last) / 1000) : 0; F.last = ts; F.t += dt;
+    if (!F.paused && !F.done) advance(dt * F.speed);
+    draw(); raf = requestAnimationFrame(frame);
+  }
+  function crisisCtx() { var e = F.ev, m = (e.dvAvail - F.dvExtra) / e.dv.total - 1; return { F: F, ev: e, D: F.D, rng: F.rng, owlt: Math.max(F.owlt, 0.5), margin: m, capShare: e.dv.capture * e.dv.lowF / e.dv.total }; }
+  function advance(dt) {
+    var st = F.stages[F.i], e = F.ev; F.p += dt / st.dur;
+    if (st.id === 'cruise' && F.p >= F.hook && !F.fired.cruise) { F.fired.cruise = 1; return openCrisis(F.plan.cruise); }
+    if (st.id === 'arrival' && F.p >= 0.1 && !F.fired.arrival) { F.fired.arrival = 1; if (F.plan.arrival) return openCrisis(F.plan.arrival); }
+    if (st.id === 'ops' && F.p >= 0.42 && !F.fired.ops) { F.fired.ops = 1; return openCrisis(F.plan.ops); }
+    if (st.id === 'ops' && F.opsFailAt && F.p >= F.opsFailAt) { F.opsFrac = F.opsFailAt; return lost('ops', 'A fault during science operations ended the mission ' + Math.round(F.opsFailAt * e.years * 12) + ' months in.'); }
+    if (F.p < 1) return;
+    F.p = 1;
+    if (st.id === 'launch') { if (F.rng() < e.risk.launch) return lost('launch', 'The launch vehicle failed during ascent.'); log('Spacecraft separation confirmed. Launch energy C3 ' + e.tr.c3.toFixed(1) + ' km²/s² achieved.', 'good'); }
+    if (st.id === 'cruise') { if (F.rng() < E.clamp(e.risk.cruise, 0, 0.9)) return lost('cruise', 'A hardware fault during the ' + days(e.cruiseDays) + ' cruise silenced the spacecraft.'); F.endKm = F.M.km(F.M.at(1)); log('Cruise complete after ' + days(e.cruiseDays) + '. ' + e.d.name + ' fills the navigation camera.', 'good'); }
+    if (st.id === 'arrival') {
+      var margin = (e.dvAvail - F.dvExtra) / e.dv.total - 1, pA = E.clamp(e.risk.arrival / E.marginFactor(e.dvMargin) * E.marginFactor(margin) * F.arrMult, 0, 0.95);
+      if (F.rng() < pA) return lost('arrival', e.orb.fixedDv != null ? 'The rendezvous sequence failed and the spacecraft drifted past its target.' : 'The braking burn failed. The spacecraft did not enter orbit.');
+      F.reachedOps = true; var pOps = 1 - Math.pow(1 - E.clamp(e.risk.opsPerYear * F.opsMult, 0, 0.9), e.years); if (F.rng() < pOps) F.opsFailAt = 0.12 + F.rng() * 0.8;
+      log((e.orb.fixedDv != null ? 'Rendezvous complete. ' : 'Burn confirmed, ' + dur(F.owlt) + ' after it ended. ') + 'In orbit: ' + e.orb.name + '.', 'good');
+    }
+    if (st.id === 'ops') { F.opsFrac = 1; log('Primary science phase complete: ' + e.years + (e.years === 1 ? ' year at ' : ' years at ') + e.d.name + '.', 'good'); }
+    if (st.id === 'return') { if (F.rng() < e.risk.sample) { F.sciMult *= 0.45; F.lostAt = 'sample'; F.cause = 'The sample capsule was lost on return to Earth. The orbital science had already been sent home.'; log(F.cause, 'bad'); return finish(false); } log('Capsule on the ground. The sample is on its way to the curation lab.', 'good'); }
+    if (F.i === F.stages.length - 1) return finish(true);
+    F.i++; F.p = 0; phases();
+    var nx = F.stages[F.i];
+    if (nx.id === 'cruise') log('Coasting. The signal delay grows every day.', '');
+    if (nx.id === 'ops') log('Instruments on. Data is flowing at ' + (e.rate >= 1000 ? (e.rate / 1000).toFixed(1) + ' Mbps' : e.rate.toFixed(0) + ' kbps') + '.', '');
+  }
+  function lost(phase, cause) { F.lostAt = phase; F.cause = cause; log(cause, 'bad'); finish(false); }
+  function finish(ok) {
+    F.done = true; F.survived = ok; phases();
+    var e = F.ev, fl = { survived: ok, reachedOps: F.reachedOps, sciMult: F.sciMult, opsFrac: F.opsFrac, crisisGrades: F.grades, extraCost: F.extraCost, extraYears: F.extraYears };
+    var sc = E.score(e, fl), n = S.players.length, met = E.ROLES.map(function (r) { return r.test(e); }), bonus = n > 1 ? met.filter(Boolean).length * 15 : 0;
+    sc.team = bonus; sc.total += bonus;
+    S.result = { sc: sc, D: F.D, seed: F.seed, lostAt: F.lostAt, cause: F.cause, events: F.events, met: met, sciMult: F.sciMult, opsFrac: F.opsFrac, reachedOps: F.reachedOps, extraCost: F.extraCost, extraYears: F.extraYears, mode: S.mode, sandbox: S.sandbox };
+    S.history.push({ n: S.history.length + 1, score: sc.total, outcome: sc.outcome, sci: sc.sciAchieved, cost: sc.cost, wet: e.wet, p: e.risk.success, insts: e.insts.length });
+    if (!S.sandbox) UI.boardAdd({ team: (S.team && S.team.trim()) || S.players.map(function (p, i) { return UI.playerName(i); }).join(', '), mission: e.d.name + ': ' + e.obj.title, mode: S.mode === 'cadet' ? 'Cadet' : 'Engineer', score: sc.total });
+    UI.persist(); endCard();
+  }
+  function endCard() { var r = S.result, t = { success: 'Mission success', partial: 'Partial success', failure: r.lostAt ? 'Mission lost' : 'Objective not met' }[r.sc.outcome]; $('#crisis').innerHTML = '<div class="crisis"><div class="crisis-card" style="border-color:' + (r.sc.outcome === 'success' ? COL.cyan : r.sc.outcome === 'partial' ? COL.amber : COL.bad) + '"><span class="k">End of flight</span><h3>' + t + '</h3><p class="outcome">' + esc(r.cause || (r.sc.outcome === 'success' ? 'Every phase completed.' : 'The spacecraft survived every phase, but returned only ' + pct(r.sc.sciAchieved) + ' of the science objective.')) + '</p><div><button type="button" class="btn primary" data-act="debrief">Open the debrief</button></div></div></div>'; }
+
+  function openCrisis(id) { var c = CARDS[id], x = crisisCtx(); F.paused = true; F.crisis = { id: id, stage: 'ask', owlt: x.owlt }; log('Anomaly: ' + c.title + '.', 'warn'); showCrisis(); }
+  function val(v, x) { return typeof v === 'function' ? v(x) : v; }
+  function showCrisis() {
+    var cr = F.crisis, c = CARDS[cr.id], x = crisisCtx(); x.owlt = cr.owlt; var el = $('#crisis'), h;
+    if (cr.stage === 'ask') {
+      h = '<span class="k">Anomaly · your call</span><h3>' + c.title + '</h3><p>' + esc(c.text(x)) + '</p><p class="delay num">Signal delay now: ' + dur(x.owlt) + ' each way.</p>' +
+        '<p class="real cadet-only"><b style="color:' + COL.sand + '">Echo:</b> ' + esc(c.hint(x)) + '</p>' +
+        c.options.map(function (o, i) { var ok = !o.need || o.need(x); return '<button type="button" class="choice" data-act="choice" data-v="' + i + '"' + (ok ? '' : ' disabled') + '><b>' + o.label + '</b><span>' + esc(val(o.detail, x)) + (ok ? '' : ' You did not fit it.') + '</span><em class="eng-only">Odds: ' + esc(val(o.odds, x)) + '</em></button>'; }).join('') +
+        '<p class="real">This happened: ' + esc(c.real) + '</p>';
+    } else if (cr.stage === 'transit') {
+      h = '<span class="k">Command in flight</span><h3>' + c.title + '</h3><div class="transit"><p class="delay num">Command sent. It arrives in ' + dur(x.owlt) + '. The reply reaches Earth ' + dur(2 * x.owlt) + ' from now.</p><div class="track"><span class="earth"></span><span class="body" style="background:' + COL.cyan + '"></span><span class="pulse" id="tp"></span></div><p class="mute">Nothing you do now can change what happens there.</p></div>';
+    } else {
+      h = '<span class="k">Outcome</span><h3>' + c.title + '</h3><p class="mute">You chose: ' + esc(cr.label) + '</p><p class="outcome">' + esc(cr.res.text) + '</p><div><button type="button" class="btn primary" data-act="resume-flight">Continue the flight</button></div>';
+    }
+    el.innerHTML = '<div class="crisis"><div class="crisis-card">' + h + '</div></div>';
+  }
+  UI.flightAct = function (act, v) {
+    if (!F) { if (act === 'again') { S.screen = 'design'; S.step = 6; S.go = {}; UI.render(); } if (act === 'newmission') { S.screen = 'home'; UI.render(); } return; }
+    if (act === 'speed') { F.speed = F.speed === 1 ? 4 : 1; $('#btn-speed').textContent = 'Speed ×' + F.speed; }
+    if (act === 'skip' && !F.paused && !F.done) { var sid = F.stages[F.i].id, hook = { cruise: F.hook, arrival: F.plan.arrival ? 0.1 : null, ops: 0.42 }[sid]; if (hook != null && !F.fired[sid]) F.p = Math.max(F.p, hook); else F.p = 1; advance(0); }
+    if (act === 'choice') {
+      var cr = F.crisis, c = CARDS[cr.id], o = c.options[+v], x = crisisCtx(); x.owlt = cr.owlt;
+      cr.label = o.label; cr.res = o.run(x); F.grades.push(cr.res.grade);
+      F.events.push({ title: c.title, real: c.real, choice: o.label, text: cr.res.text, tone: cr.res.tone, owlt: cr.owlt, grade: cr.res.grade });
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (o.ground && !reduce) { cr.stage = 'transit'; cr.t0 = F.t; showCrisis(); } else { cr.stage = 'done'; showCrisis(); }
+    }
+    if (act === 'resume-flight') { var r = F.crisis; log(r.label + ': ' + r.res.text, r.res.tone); F.crisis = null; $('#crisis').innerHTML = ''; F.paused = false; if (F.pendingLoss) { F.pendingLoss = false; lost(F.lostAt, F.cause); } }
+    if (act === 'debrief') { UI.flightStop(); S.screen = 'debrief'; UI.render(); }
+    if (act === 'again') { UI.flightStop(); S.screen = 'design'; S.step = 6; S.go = {}; UI.render(); }
+    if (act === 'newmission') { UI.flightStop(); S.screen = 'home'; UI.render(); }
+  };
+  function draw() {
+    var cv = $('#sky'); if (!cv) return; var v = fit(cv), st = F.stages[F.i], e = F.ev, d = e.d, D = F.D, km = 0, clock = '';
+    if (st.id === 'launch') { drawLaunch(v.c, v.w, v.h, F.p); km = 200 + F.p * 6000; clock = 'T+' + Math.round(F.p * 540) + ' s'; }
+    else if (st.id === 'cruise') { drawTransfer(v.c, v.w, v.h, F.M, F.p, D.dest, F.t); km = F.M.km(F.M.at(F.p)); clock = 'Cruise day ' + Math.max(1, Math.round(F.p * e.cruiseDays)) + ' of ' + Math.round(e.cruiseDays); }
+    else if (st.id === 'return') { drawTransfer(v.c, v.w, v.h, F.M, 1 - F.p, D.dest, F.t); km = F.M.km(F.M.at(1 - F.p)); clock = 'Homeward, month ' + Math.round(F.p * e.retYears * 12); }
+    else {
+      drawOrbit(v.c, v.w, v.h, e, D.dest, F.t, st.id === 'ops');
+      var mid = (d.dMin + d.dMax) / 2, amp = (d.dMax - d.dMin) / 2, end = F.endKm || mid, ph0 = Math.acos(E.clamp((mid - end) / amp, -1, 1));
+      km = st.id === 'ops' ? mid - amp * Math.cos(ph0 + F.p * e.years / SYN[D.dest] * 6.283) : end;
+      clock = st.id === 'ops' ? 'Science month ' + Math.max(1, Math.round(F.p * e.years * 12)) + ' of ' + Math.round(e.years * 12) + ' · ' + (F.p * e.years * 365.25 * Math.min(e.genGB, e.downGB) * F.sciMult).toFixed(0) + ' GB home' : st.label;
+    }
+    F.owlt = km / E.K.c; F.clock = clock;
+    $('#hud-owlt').textContent = dur(F.owlt); $('#hud-rt').textContent = 'Round trip ' + dur(2 * F.owlt); $('#hud-clock').textContent = clock;
+    if (F.crisis && F.crisis.stage === 'transit') { var u = (F.t - F.crisis.t0) / 2.8, tp = $('#tp'); if (tp) tp.style.left = 'calc(6px + (100% - 12px) * ' + Math.min(1, u).toFixed(3) + ')'; if (u >= 1) { F.crisis.stage = 'done'; showCrisis(); } }
+  }
+
+  /* ---------- debrief ---------- */
+  function echoAt(x, y, s, mood) { return UI.echo(mood).replace('<svg ', '<svg x="' + x + '" y="' + y + '" width="' + s + '" height="' + s + '" '); }
+  function comic(r, e) {
+    var ok = r.sc.outcome === 'success', part = r.sc.outcome === 'partial', evn = r.events[r.events.length - 1], lostLaunch = r.lostAt === 'launch';
+    var craft = '<g stroke="#0B1D3A" stroke-width="2" fill="#FFFFFF"><rect x="-10" y="-9" width="20" height="18"/><rect x="-38" y="-5" width="26" height="10" fill="#0099FF"/><rect x="12" y="-5" width="26" height="10" fill="#0099FF"/><path d="M-9 -12 Q0 -3 9 -12 z" fill="#FF9900"/></g>';
+    var p1 = '<svg viewBox="0 0 240 150"><rect x="14" y="16" width="130" height="92" fill="#FFFFFF" stroke="#0B1D3A" stroke-width="3"/><g transform="translate(79 52)">' + craft + '</g><path d="M30 84 h98 M30 94 h70" stroke="#0099FF" stroke-width="3" stroke-linecap="round"/><text x="30" y="34" font-size="9" font-family="monospace" fill="#0B1D3A">' + esc(e.d.name.toUpperCase()) + '</text>' + echoAt(150, 50, 82, 'calm') + '</svg>';
+    var p2 = lostLaunch ? '<svg viewBox="0 0 240 150"><path d="M0 128 h240 v22 h-240 z" fill="#0B1D3A"/><path d="M120 30 l10 24 l26 -8 l-14 22 l22 14 l-26 4 l4 26 l-22 -16 l-22 16 l4 -26 l-26 -4 l22 -14 l-14 -22 l26 8 z" fill="#FF9900" stroke="#0B1D3A" stroke-width="3"/><circle cx="120" cy="76" r="14" fill="#FFAE00"/></svg>'
+      : '<svg viewBox="0 0 240 150"><path d="M0 128 h240 v22 h-240 z" fill="#0B1D3A"/><g stroke="#0B1D3A" stroke-width="3"><path d="M108 96 v-56 q12 -22 24 0 v56 z" fill="#FFFFFF"/><path d="M108 96 l-12 12 h12 z M132 96 l12 12 h-12 z" fill="#0099FF"/><path d="M112 98 q8 34 16 0 z" fill="#FF9900"/></g><circle cx="120" cy="58" r="6" fill="#00D2FF" stroke="#0B1D3A" stroke-width="2"/><g fill="#FFFFFF" stroke="#0B1D3A" stroke-width="2"><circle cx="82" cy="124" r="13"/><circle cx="104" cy="130" r="11"/><circle cx="140" cy="130" r="12"/><circle cx="162" cy="124" r="13"/></g></svg>';
+    var p3 = '<svg viewBox="0 0 240 150"><rect width="240" height="150" fill="#0B1D3A"/><g fill="#FFFFFF"><circle cx="30" cy="22" r="1.2"/><circle cx="96" cy="40" r="1"/><circle cx="200" cy="18" r="1.3"/><circle cx="150" cy="120" r="1"/><circle cx="60" cy="90" r="1"/></g><circle cx="34" cy="118" r="16" fill="#0099FF"/><path d="M46 106 Q110 30 172 52" fill="none" stroke="#00D2FF" stroke-width="2.5" stroke-dasharray="3 7"/><g transform="translate(186 56) rotate(-18)">' + craft + '</g>' + (evn ? '<g transform="translate(206 26)"><circle r="13" fill="#FFAE00" stroke="#FFFFFF" stroke-width="2"/><text y="6" text-anchor="middle" font-size="18" font-weight="700" font-family="monospace" fill="#0B1D3A">!</text></g>' : '') + '<text x="92" y="112" font-size="11" font-family="monospace" fill="#00D2FF">' + esc(evn ? dur(evn.owlt) : dur(e.owltMin * 60)) + '</text></svg>';
+    var bars = ok ? [34, 52, 44, 66] : part ? [30, 12, 22, 8] : [6, 4, 0, 0];
+    var p4 = '<svg viewBox="0 0 240 150">' + (ok ? '<g fill="#FF9900"><rect x="20" y="20" width="6" height="6" transform="rotate(20 23 23)"/><rect x="210" y="28" width="6" height="6" transform="rotate(50 213 31)"/><rect x="60" y="12" width="5" height="5"/></g><g fill="#00D2FF"><rect x="184" y="14" width="6" height="6" transform="rotate(30 187 17)"/><rect x="36" y="48" width="5" height="5"/><rect x="224" y="62" width="5" height="5"/></g>' : '') +
+      '<rect x="16" y="52" width="104" height="80" fill="#FFFFFF" stroke="#0B1D3A" stroke-width="3"/>' + bars.map(function (b, i) { return '<rect x="' + (28 + i * 22) + '" y="' + (122 - b) + '" width="14" height="' + Math.max(1, b) + '" fill="' + (ok ? '#00D2FF' : part ? '#FFAE00' : '#FF5D6C') + '" stroke="#0B1D3A" stroke-width="2"/>'; }).join('') + '<path d="M24 122 h88" stroke="#0B1D3A" stroke-width="2"/>' + echoAt(132, 44, 92, ok ? 'happy' : part ? 'worried' : 'sad') + '</svg>';
+    var c1 = e.insts.length + (e.insts.length === 1 ? ' instrument, ' : ' instruments, ') + fmt(e.wet) + ' kg and $' + fmt(e.cost.total) + 'M to ' + e.obj.title.charAt(0).toLowerCase() + e.obj.title.slice(1) + '.';
+    var c2 = lostLaunch ? 'The rocket fails on the way up. It happens to about one launch in ' + Math.round(1 / Math.max(0.001, e.risk.launch)) + '.' : e.lv.name + ' throws it onto its route. ' + days(e.cruiseDays) + ' of cruise ahead.';
+    var c3 = lostLaunch ? 'There is no signal to wait for.' : evn ? evn.title + '. The team chose to ' + evn.choice.charAt(0).toLowerCase() + evn.choice.slice(1) + ', with ' + dur(evn.owlt) + ' between Earth and the spacecraft.' : 'Nothing went wrong on the way. That is rarer than it sounds.';
+    var c4 = ok ? pct(r.sc.sciAchieved) + ' of the science objective is home. ' + r.sc.total + ' points.' : part ? 'Some science came home: ' + pct(r.sc.sciAchieved) + ' of the objective. ' + r.sc.total + ' points.' : 'No science this time. The next design starts with what this one taught. ' + r.sc.total + ' points.';
+    return '<div class="comic">' + [['1 · The plan', p1, c1], ['2 · Launch day', p2, c2], ['3 · The long silence', p3, c3], ['4 · The verdict', p4, c4]].map(function (p) { return '<figure>' + p[1] + '<figcaption><b>' + p[0] + '</b>' + esc(p[2]) + '</figcaption></figure>'; }).join('') + '</div>';
+  }
+  UI.debriefView = function () {
+    var r = S.result; if (!r) return '<div class="wrap"><p style="padding:40px 0">Fly a mission first.</p></div>';
+    var e = E.evaluate(r.D, { mode: r.mode, sandbox: r.sandbox }), sc = r.sc, d = e.d, real = E.REAL[d.real];
+    var title = { success: 'Mission success', partial: 'Partial success', failure: r.lostAt ? 'Mission lost' : 'Objective not met' }[sc.outcome];
+    var line = sc.outcome === 'success' ? 'Your spacecraft returned ' + pct(sc.sciAchieved) + ' of its science objective over ' + e.years + (e.years === 1 ? ' year at ' : ' years at ') + d.name + '.' : (r.cause || 'The spacecraft survived every phase, but returned only ' + pct(sc.sciAchieved) + ' of the science objective. The science chain below shows where the rest went.');
+    var rank = ['Trainee', 'Flight Controller', 'Systems Lead', 'Mission Manager', 'Chief Engineer'][sc.stars - 1], stars = ''; for (var i = 1; i <= 5; i++) stars += i <= sc.stars ? '★' : '<s>★</s>';
+    var names = { science: 'Science returned', reliability: 'Design reliability', budget: 'Budget', margins: 'Engineering margins', schedule: 'Schedule', crisis: 'Crisis decisions' };
+    var brk = Object.keys(names).map(function (k) { var v = sc.parts[k], m = sc.max[k], cls = v / m > 0.75 ? 'ok' : v / m > 0.4 ? 'tight' : 'bad'; return '<div class="brk-row meter ' + cls + '" style="display:grid"><span>' + names[k] + '</span><div class="mbar"><i style="width:' + (v / m * 100).toFixed(0) + '%"></i></div><span class="num" style="text-align:right">' + Math.round(v) + ' / ' + m + '</span></div>'; }).join('') + (sc.team != null && S.players.length > 1 ? '<div class="brk-row"><span>Team goals met</span><span class="mute">' + r.met.filter(Boolean).length + ' of 4 departments</span><span class="num" style="text-align:right">+' + sc.team + '</span></div>' : '');
+    function box(l, v, low, end) { return '<div class="link-box' + (low ? ' low' : '') + (end ? ' end' : '') + '"><small>' + l + '</small><b class="num">' + v + '</b></div>'; }
+    var chain = '<div class="chain">' + box('Instruments', e.sciRaw.toFixed(1) + ' pts') + '<span class="x">×</span>' + box('Orbit', e.orbF.toFixed(2), e.orbF < 0.8) + '<span class="x">×</span>' + box('Data returned', e.dataFrac.toFixed(2), e.dataFrac < 0.95) + '<span class="x">×</span>' + box('Time on station', e.durF.toFixed(2), e.durF < 0.9) + '<span class="x">×</span>' + box('Flight events', (r.reachedOps ? r.sciMult * r.opsFrac : 0).toFixed(2), !r.reachedOps || r.sciMult * r.opsFrac < 0.9) + '<span class="x">÷</span>' + box('Goal', e.obj.goal + ' pts') + '<span class="x">=</span>' + box('Science', pct(sc.sciAchieved), false, true) + '</div>';
+    // why it went this way
+    var why = [];
+    if (r.lostAt === 'launch') why.push(['block', 'Lost at launch', 'No design choice caused this. ' + e.lv.name + ' has a ' + (e.lv.rel * 100).toFixed(1) + '% record, so about ' + Math.round((1 - e.lv.rel) * 500) + ' in 500 flights end here. A more proven rocket lowers the odds.']);
+    if (r.lostAt === 'cruise') why.push(['block', 'Lost in cruise', 'Cruise risk was ' + (e.risk.cruise * 100).toFixed(1) + '% for this design. ' + (r.D.computer === 'basic' ? 'A single computer with no backup nearly doubled it. ' : '') + (r.D.schedule === 'fast' ? 'The fast-track test campaign raised it by half. ' : '') + (e.cruiseDays > 700 ? 'A cruise of ' + days(e.cruiseDays) + ' gives faults a long time to appear.' : '')]);
+    if (r.lostAt === 'arrival') why.push(['block', 'Lost at arrival', 'Arrival risk was ' + (e.risk.arrival * 100).toFixed(1) + '% before flight events. ' + (e.dvMargin < 0.10 ? 'A fuel margin of only ' + pct(e.dvMargin) + ' multiplied it. ' : '') + (e.owltMin > 5 && !r.D.extras.autonomy ? 'With ' + Math.round(e.owltMin) + ' minutes of signal delay and no autonomy, the spacecraft flew the burn alone. ' : '') + 'Orbit insertion is a single burn that cannot be repeated.']);
+    if (r.lostAt === 'ops') why.push(['warn', 'Failed during science', 'Yearly failure odds were ' + (e.risk.opsPerYear * 100).toFixed(1) + '%. ' + (e.radF > 1.3 ? 'Radiation in this orbit multiplied them by ' + e.radF.toFixed(1) + '. ' : '') + (e.powerMargin < 0.10 ? 'A thin power margin made brownouts likely. ' : '') + (!e.eclOK ? 'The battery was too small for the shadow passes. ' : '')]);
+    if (r.lostAt === 'sample') why.push(['warn', 'Capsule lost on return', 'Sample return adds one more event that must work first time. An extended test campaign lowers the odds.']);
+    r.events.forEach(function (x) { why.push([x.tone === 'bad' ? 'block' : x.tone === 'warn' ? 'warn' : 'info', x.title, 'You chose to ' + x.choice.charAt(0).toLowerCase() + x.choice.slice(1) + ', with a signal delay of ' + dur(x.owlt) + '. ' + x.text]); });
+    if (r.reachedOps && e.dataFrac < 0.95) why.push(['warn', 'The data link held the science back', 'Instruments recorded ' + e.genGB.toFixed(1) + ' GB a day and the link returned ' + e.downGB.toFixed(2) + '. ' + pct(1 - e.dataFrac) + ' of the measurements never left the spacecraft.']);
+    if (r.reachedOps && e.orbF < 0.8) why.push(['info', 'The orbit limited the instruments', 'This orbit delivers ' + e.orbF.toFixed(2) + ' of the best possible return for the objective. A better orbit costs more fuel to enter.']);
+    if (e.sciRaw / e.obj.goal < 0.9) why.push(['info', 'The payload was light for the objective', 'The instruments were worth ' + e.sciRaw.toFixed(1) + ' points against a goal of ' + e.obj.goal + '.']);
+    e.sciItems.forEach(function (x) { if (x.note) why.push(['info', E.INST[x.id].name + ' underperformed', 'Reason: ' + x.note + '.']); });
+    if (!e.sandbox && sc.cost > e.budget) why.push(['warn', 'Over the cost cap', 'Final cost was $' + fmt(sc.cost) + 'M against a cap of $' + fmt(e.budget) + 'M.']);
+    var whyHTML = why.slice(0, 7).map(function (w) { return '<div class="issue ' + w[0] + '"><b>' + esc(w[1]) + '</b><p>' + esc(w[2]) + '</p></div>'; }).join('') || '<p class="mute">Nothing went wrong, and the design had margin everywhere. Try a harder destination or Engineer mode.</p>';
+    var next = e.reqs.filter(function (q) { return !q.ok; }).map(function (q) { return ({ sci: 'Raise the science return: add an instrument that scores for this objective, or fix whatever is holding the chain back.', mass: 'Give the launch more mass margin with a lighter spacecraft or a larger rocket.', dv: 'Carry at least 10% spare fuel.', power: 'Add power generation or a larger battery.', data: 'Open up the data link: larger dish, stronger transmitter or 70 m stations.', budget: 'Find savings. The Review step shows where the money goes.', time: 'Shorten the route or the science phase to meet the deadline.', risk: 'Lower the risk with redundancy, autonomy or a longer test campaign.' })[q.id]; });
+    var nextHTML = next.length ? '<ul>' + next.map(function (n) { return '<li>' + n + '</li>'; }).join('') + '</ul>' : '<p class="mute">Every requirement was closed. To score higher, trim cost while keeping the margins, or try another objective.</p>';
+    var cmp = '<div class="scroll"><table class="table"><thead><tr><th></th><th class="r">Your design</th><th class="r">' + real.name + ' (' + real.year + ')</th></tr></thead><tbody>' +
+      '<tr><th>Launch mass</th><td class="r num">' + fmt(e.wet) + ' kg</td><td class="r num">' + fmt(real.wet) + ' kg</td></tr><tr><th>Dry mass</th><td class="r num">' + fmt(e.dry) + ' kg</td><td class="r num">' + fmt(real.dry) + ' kg</td></tr>' +
+      '<tr><th>Power at destination</th><td class="r num">' + fmt(e.pGen) + ' W</td><td class="r num">' + (real.power ? 'about ' + fmt(real.power) + ' W' : '–') + '</td></tr><tr><th>Launch vehicle</th><td class="r">' + e.lv.name + '</td><td class="r">' + real.lv + '</td></tr>' +
+      '<tr><th>Cruise</th><td class="r num">' + days(e.cruiseDays) + '</td><td class="r num">' + real.cruise + '</td></tr><tr><th>Total cost</th><td class="r num">$' + fmt(sc.cost) + 'M</td><td class="r num">' + (real.cost ? 'about $' + fmt(real.cost) + 'M' : '–') + '</td></tr></tbody></table></div><p class="mute" style="font-size:12px;margin-top:8px">' + real.note + '</p>';
+    var hist = S.history.length > 1 ? '<section class="panel"><h3>Your attempts at this mission</h3><div class="scroll"><table class="table"><thead><tr><th>#</th><th>Result</th><th class="r">Science</th><th class="r">Cost</th><th class="r">Launch mass</th><th class="r">Forecast</th><th class="r">Score</th></tr></thead><tbody>' + S.history.map(function (h) { return '<tr><td class="num">' + h.n + '</td><td>' + ({ success: 'Success', partial: 'Partial', failure: 'Failed' })[h.outcome] + '</td><td class="r num">' + pct(h.sci) + '</td><td class="r num">$' + fmt(h.cost) + 'M</td><td class="r num">' + fmt(h.wet) + ' kg</td><td class="r num">' + pct(h.p) + '</td><td class="r num">' + h.score + '</td></tr>'; }).join('') + '</tbody></table></div></section>' : '';
+    return '<div class="debrief"><section class="verdict ' + sc.outcome + '"><div><p class="eyebrow">' + d.name + ' · ' + e.obj.title + ' · ' + (r.mode === 'cadet' ? 'Cadet' : 'Engineer') + (r.sandbox ? ' · Sandbox' : '') + '</p><h1>' + title + '</h1><p>' + esc(line) + '</p></div><div class="scorebox"><div class="n num">' + sc.total + '</div><div class="of">of ' + (S.players.length > 1 ? '1,060' : '1,000') + ' points</div><div class="stars" aria-label="' + sc.stars + ' of 5 stars">' + stars + '</div><div class="rank">' + rank + '</div></div></section>' +
+      '<section class="actions"><button type="button" class="btn primary" data-act="again">Change the design and fly again</button><button type="button" class="btn" data-act="newmission">Choose another mission</button><button type="button" class="link" data-act="modal" data-v="board">Leaderboard</button></section>' +
+      '<section class="panel"><h3>The mission in four panels</h3>' + comic(r, e) + '</section>' +
+      '<div class="cols"><section class="panel"><h3>Score breakdown</h3><div class="brk">' + brk + '</div></section><section class="panel"><h3>Where the science went</h3>' + chain + '<p class="mute" style="font-size:12px;margin-top:10px">Each box takes its share of what the instruments could have returned. Amber boxes cost you the most.</p></section></div>' +
+      '<div class="cols"><section class="panel"><h3>Why it went this way</h3><div style="display:grid;gap:8px">' + whyHTML + '</div></section><section class="panel"><h3>What to try next</h3>' + nextHTML + '<h3 style="margin-top:18px">Against the real mission</h3>' + cmp + '</section></div>' + hist + '</div>';
+  };
+})();
+
+</script>
+<script>
+(function () {
+  var hot = window.claude && window.claude.hot;
+  function start(data) { window.SDUI.boot(data); }
+  if (hot && hot.snapshot) hot.snapshot(function () { var S = window.SDUI.S; return { mode: S.mode, sandbox: S.sandbox, players: S.players, team: S.team, design: S.design, step: S.step, history: S.history, screen: S.screen === 'home' ? 'home' : 'design' }; });
+  if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+})();
+</script>
+</body>
+</html>

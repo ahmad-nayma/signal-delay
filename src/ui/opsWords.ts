@@ -1,0 +1,324 @@
+// Words for the Operations Console (Cadet and Engineer). Numbers come from the engine (ops/console.ts) and are
+// only formatted here, through format.ts. Event messages arrive as codes with values (spec: messages are data).
+import type { ConsoleChip, ConsoleGauges, SignalState } from '../engine/ops/console';
+import type { FailureEffect, OpsPhase } from '../engine/data';
+import type { ResponseBlocker } from '../engine/ops/responses';
+import type { ExtensionOption, OpsEvent } from '../engine/ops/types';
+import type { MeterStatus } from '../engine/types';
+import * as f from './format';
+import { live } from './i18n/live';
+
+export const OPS_PHASE: Record<OpsPhase, string> = {
+  launch: 'Launch',
+  cruise: 'Cruise',
+  arrival: 'Arrival',
+  science: 'Science orbit',
+  return: 'Trip home',
+  extended: 'Extended mission',
+};
+
+export const CHIP: Record<ConsoleChip, { label: string; tone: MeterStatus }> = {
+  nominal: { label: 'ALL SYSTEMS GO', tone: 'ok' },
+  hazard: { label: 'HAZARD · DECISION', tone: 'over' },
+  'safe-mode': { label: 'SAFE MODE', tone: 'warning' },
+  'conjunction-soon': { label: 'CONJUNCTION AHEAD', tone: 'warning' },
+  blackout: { label: 'NO CONTACT', tone: 'over' },
+  decision: { label: 'DECISION', tone: 'warning' },
+  lost: { label: 'CRAFT LOST', tone: 'over' },
+  complete: { label: 'MISSION COMPLETE', tone: 'ok' },
+  'not-launched': { label: 'NOT LAUNCHED', tone: 'over' },
+};
+
+export const STATUS_LABEL: Record<MeterStatus, string> = { ok: 'OK', warning: 'WARNING', over: 'OVER LIMIT' };
+
+export type GaugeKey = keyof ConsoleGauges;
+export const GAUGE_NAME: Record<GaugeKey, { cadet: string; engineer: string }> = {
+  power: { cadet: 'Battery', engineer: 'Power today' },
+  fuel: { cadet: 'Fuel tank', engineer: 'Δv left' },
+  recorder: { cadet: 'Photos waiting', engineer: 'Recorder' },
+  budget: { cadet: 'Ops budget', engineer: 'Budget reserve' },
+};
+
+/** The Cadet sentence under each gauge. */
+function gaugeLineEn(k: GaugeKey, g: ConsoleGauges, destName: string): string {
+  switch (k) {
+    case 'power': {
+      const p = g.power;
+      if (p.status === 'over') return 'Not enough power today: the craft is switching things off.';
+      if (p.status === 'warning') return 'Very little power to spare today.';
+      if (p.inEclipseSeason) return `Healthy. Recharges after every trip through ${destName}’s shadow.`;
+      return 'Full sunshine. Plenty of power today.';
+    }
+    case 'fuel': {
+      const x = g.fuel;
+      if (x.status === 'over') return 'Not enough fuel for the burns still planned!';
+      if (x.status === 'warning') return 'Enough for the burns ahead, with only a thin cushion left.';
+      return 'Enough for every burn still planned, with fuel to spare.';
+    }
+    case 'recorder': {
+      const r = g.recorder;
+      if (r.status === 'over') return 'Memory is full: new photos are being lost.';
+      if (r.daysToFull !== undefined && r.status === 'warning') return `Memory is full in about ${f.num(r.daysToFull)} days. Send photos home or slow the science.`;
+      if (r.photosWaiting < 1) return 'Everything is home.';
+      return `About ${f.photos(r.photosWaiting)} photos waiting to go home.`;
+    }
+    case 'budget': {
+      const b = g.budget;
+      if (b.status === 'over') return 'Over budget: extra calls and fixes cost more than the reserve.';
+      if (b.status === 'warning') return 'The reserve is nearly spent.';
+      return 'Reserve for extra calls home and for fixing problems.';
+    }
+  }
+}
+export const gaugeLine = live('gaugeLine', gaugeLineEn);
+
+export const SIGNAL_LINE: Record<SignalState, string> = {
+  downlink: 'Photos and news travelling home',
+  uplink: 'Your command is on its way',
+  blocked: 'The Sun blocks the radio',
+  none: 'Radio silent',
+};
+
+export const BLOCKER: Record<ResponseBlocker, string> = {
+  deltaV: 'Not enough fuel to spare',
+  budget: 'Not enough money left in the reserve',
+  scienceDays: 'Not enough science days left',
+  power: 'Not enough spare power today',
+  'one-time': 'Already used once this mission',
+};
+
+export const FAILURE_EFFECT: Record<FailureEffect, string> = {
+  craft: 'the craft could be lost',
+  instrument: 'an instrument could break',
+  'stored-data': 'the photos on board could be wiped',
+  'safe-mode': 'the craft could drop into safe mode',
+};
+
+export const RISK_WORD = ['', 'VERY LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY HIGH'] as const;
+
+/** A friendlier Cadet line for a response, where the data label is technical. */
+export const OPTION_BLURB: Record<string, string> = {
+  'solar-storm.shelter': 'Switch the instruments off and wait it out.',
+  'solar-storm.keep-observing': 'Measure the storm up close. An instrument might be damaged.',
+  'cme-shock.safe-mode': 'Shut down to the basics until the shock has passed.',
+  'cme-shock.keep-observing': 'Watch the shock hit Mars, as MAVEN did. An instrument might be damaged.',
+  'mars-dust-storm.raise-periapsis': 'Burn a little fuel to stay above the swelling air.',
+  'mars-dust-storm.wait-it-out': 'Stop taking pictures until the dust settles.',
+  'mars-dust-storm.carry-on': 'Keep flying as planned and hope the air stays thin.',
+  'debris.hide': 'Time the orbit so the planet shields you.',
+  'debris.edge-on': 'Turn the panels edge-on and close the instruments.',
+  'debris.ignore': 'Do nothing and hope nothing hits.',
+  'reaction-wheel.thrusters': 'Point with the thrusters: costs fuel.',
+  'reaction-wheel.hybrid': 'Learn to point with the wheels that are left.',
+  'reaction-wheel.carry-on': 'Keep going on the remaining wheels.',
+  'memory-corruption.backup-computer': 'Switch to the spare computer (once only).',
+  'memory-corruption.patch': 'Engineers write a fix and send it up.',
+  'memory-corruption.reboot': 'Turn it off and on again.',
+  'insertion-anomaly.trim-burn': 'Fire the thrusters to finish the capture.',
+  'insertion-anomaly.accept-orbit': 'Keep the longer orbit and change the science plan.',
+  'insertion-anomaly.hold': 'Let the craft look after itself.',
+  'drag-heating.pop-up': 'Raise the periapsis now',
+  'drag-heating.stay-low': 'Stay low and finish the picture',
+};
+
+export const EXTENSION_BLOCKER: Record<ExtensionOption['blockedBy'][number], string> = {
+  deltaV: 'Not enough fuel for the orbit trims',
+  power: 'Not enough power at the end',
+  radiation: 'The electronics would take too much radiation',
+  attitude: 'The craft can no longer point properly',
+  'science-review': 'NASA review: not enough science sent home yet',
+};
+
+export const COMMAND_KIND: Record<'power-plan' | 'respond' | 'standing-orders' | 'observe', string> = {
+  observe: 'Take a picture',
+  'power-plan': 'New power plan',
+  respond: 'Hazard response',
+  'standing-orders': 'New standing orders',
+};
+
+/** One line for the event feed. */
+function eventLineEn(e: OpsEvent, ctx: { destName: string; optionLabel: (hazardId: string, optionId: string) => string }): string | undefined {
+  const v = e.values;
+  switch (e.code) {
+    case 'launch':
+      return 'Launch! Your craft is on its way.';
+    case 'launch-failed':
+      return 'The rocket failed on launch day.';
+    case 'phase-start':
+      return `${OPS_PHASE[v.phase as OpsPhase] ?? 'A new phase'} begins.`;
+    case 'burn':
+      if (v.kind === 'maintenance') return undefined;
+      return v.kind === 'station-keeping' ? `Trim burn: ${f.speed(Number(v.dv_ms))}.` : `Engine burn: ${f.speed(Number(v.dv_ms))}.`;
+    case 'conjunction-start':
+      return 'Solar conjunction: no radio contact until the Sun moves away.';
+    case 'conjunction-end':
+      return 'Contact is back after the conjunction.';
+    case 'eclipse-season-start':
+      return `Eclipse season: the craft passes through ${ctx.destName}’s shadow every orbit.`;
+    case 'eclipse-season-end':
+      return 'Eclipse season over: full sunshine again.';
+    case 'hazard-warning':
+      return 'Warning: something is heading for your craft.';
+    case 'decision-open':
+      return v.decisionId === 'extension' ? 'Prime mission complete: time to decide what comes next.' : 'A decision is waiting for you.';
+    case 'command-sent':
+      return 'Command sent: now it crosses space at the speed of light.';
+    case 'command-refused':
+      return v.reason === 'conjunction' ? `Command refused: no contact until day ${f.num(Number(v.retryAfterDay))}.` : 'Command refused.';
+    case 'command-executed':
+      return v.optionId ? `Craft carried out: ${ctx.optionLabel(String(v.hazardId), String(v.optionId))}.` : 'Craft carried out your command.';
+    case 'command-too-late':
+      return 'Your command arrived too late.';
+    case 'deadline-missed':
+      return v.by === 'standing-order' ? 'No command in time: the craft followed its standing order.' : 'No command in time: fault protection chose for you.';
+    case 'response-outcome':
+      return v.bad ? 'It went wrong.' : 'It worked.';
+    case 'instrument-lost':
+      return 'An instrument has stopped working.';
+    case 'stored-data-lost':
+      return `Stored data lost: ${f.bits(Number(v.bits))}.`;
+    case 'safe-mode':
+      return `Safe mode until day ${f.num(Math.floor(Number(v.until)))}.`;
+    case 'load-shed':
+      return 'Not enough power: the craft switched loads off.';
+    case 'brownout':
+      return 'Brownout: the craft’s computer lost power!';
+    case 'dsn-booked':
+      return `Call home booked: ${f.num(Number(v.dish))} m dish.`;
+    case 'dsn-refused':
+      return 'Booking refused.';
+    case 'craft-lost':
+      return 'Contact lost. The craft is gone.';
+    case 'prime-complete':
+      return 'Prime mission complete!';
+    case 'extension-decided':
+      return Number(v.years) > 0 ? 'Mission extended.' : 'The mission is retiring with honour.';
+    case 'mission-complete':
+      return 'Mission complete.';
+    case 'out-of-propellant':
+      return 'Out of fuel for a planned burn.';
+    case 'wheel-spare-took-over':
+      return 'A reaction wheel failed; the spare took over.';
+    default:
+      return undefined;
+  }
+}
+export const eventLine = live('eventLine', eventLineEn);
+
+/** The console drawers' own words (Fly & Survive): orders, the radio blackout, safe mode, the extension decision,
+ * the power plan, booking a call home, and the toasts. Engineer readouts (equations and raw values) stay as they are. */
+export const DRAWER_WORDS = {
+    queue: {
+      title: 'Command queue',
+      counts: (flying: string, recent: string) => `${flying} ON ITS WAY · ${recent} RECENT`,
+      close: 'Close command queue',
+      sunNow: (day: string) => `Solar conjunction: no commands until day ${day}.`,
+      sunSoon: (inDays: number, day: string) => `Solar conjunction in ${f.days(inDays)}: send your commands before day ${day}.`,
+      sunThen: (length: number) => `Then the Sun blocks the radio for ${f.days(length)}. Your craft runs on what you have sent.`,
+      empty: 'Nothing sent yet. Change the power plan or answer a hazard to send a command.',
+      onItsWay: 'ON ITS WAY',
+      sentDay: (day: string) => `SENT DAY ${day}`,
+      arrivesIn: 'Arrives at the craft in',
+      carriedOut: 'CARRIED OUT',
+      tooLate: 'TOO LATE',
+      day: (day: string) => `DAY ${day}`,
+      plan: '+ Power plan',
+      call: 'Book a call home',
+    },
+    blackout: {
+      label: 'Radio blackout',
+      kicker: (day: string, total: string) => `RADIO BLACKOUT · DAY ${day} OF ${total}`,
+      title: (total: number) => `Sun between Earth and craft: no contact for ${f.days(total)}`,
+      before: 'Your craft is flying on the plan you sent. Contact returns on ',
+      day: (day: string) => `day ${day}`,
+      after: (left: number) => `, in ${f.days(left)}.`,
+      skip: (day: string) => `Skip ahead to day ${day}`,
+    },
+    safe: {
+      label: 'Safe mode',
+      chip: 'SAFE MODE',
+      title: 'Your craft protected itself.',
+      body: 'It is facing the Sun with its instruments off, calling home with a slow beacon. Science starts again by itself.',
+      off: (name: string) => `${name} off`,
+      beacon: 'Beacon on',
+      resumes: 'Science resumes on ',
+      day: (day: string) => `day ${day}`,
+    },
+    ext: {
+      label: 'Mission extension',
+      kicker: 'MISSION DECISION',
+      title: 'Your prime mission is complete. What now?',
+      sub: (days: number, dest: string) => `${f.days(days)} of science at ${dest}. Your craft still works.`,
+      retire: 'Retire with honour',
+      extendBy: (years: number) => `Extend by ${years === 1 ? 'one year' : `${f.num(years)} years`}`,
+      recommended: 'RECOMMENDED · GO TO YOUR REPORT',
+      retireBody: 'Bank everything you have learned. Your score is locked in and nothing more can go wrong.',
+      extendBody: 'Keep flying for more science. New money pays for it, but parts are ageing and fuel is limited.',
+      extendCadet: ' More flying time before your report.',
+      moreScience: 'More science',
+      fuel: 'Fuel for trims',
+      of: (a: string, b: string) => `${a} of ${b}`,
+      powerEnd: 'Power at the end',
+      newMoney: 'New money',
+      retireKey: 'Retire the craft',
+      extendKey: 'Extend the mission',
+    },
+    notice: {
+      sent: 'Command sent. Watch it cross space in the command queue.',
+      booked: (day: string, big: boolean) => `Call home booked for day ${day} on the ${big ? 'big' : 'small'} dish.`,
+      conjunction: (day: string) => `No contact during the conjunction. Try again on day ${day}.`,
+      leadTime: (day: string) => `Too soon: the dishes are booked a week ahead. The first free day is day ${day}.`,
+      notFlying: 'The craft is not flying.',
+      refused: 'That was refused.',
+      dismiss: 'Dismiss',
+    },
+    power: {
+      title: 'Power plan',
+      share: 'TODAY’S SHARE',
+      close: 'Close power plan',
+      split: 'Power split: drag the white handles',
+      science: 'Science',
+      scienceShare: 'Science share',
+      photosDay: (n: string) => `About ${n} photos a day`,
+      heaters: 'Heaters',
+      heaterShare: 'Heater share',
+      chilly: 'Fuel lines getting chilly',
+      warm: 'Keeps fuel and parts warm',
+      radio: 'Radio',
+      sends: 'Sends photos home',
+      radioOff: 'Off: nothing goes home',
+      lowest: 'Battery at its lowest',
+      reset: 'Reset to usual plan',
+      noContact: 'No contact',
+      send: 'Send plan',
+      over: 'Too much! The craft would have to switch things off today.',
+      flat: (dest: string) => `Too much! The batteries would run flat in ${dest}’s shadow.`,
+      low: 'More science, but the batteries run low in eclipse.',
+      cold: 'Heaters are low: the fuel lines may get too cold, and cold parts fail more often.',
+      radioIsOff: 'Radio is off: no photos go home until you switch it back on.',
+      healthy: 'A balanced plan. The batteries stay healthy through every eclipse.',
+      balanced: 'A balanced plan.',
+    },
+    call: {
+      title: 'Book a call home',
+      pass: (day: string, hours: string) => `DAY ${day} · ${hours} H PASS`,
+      close: 'Close booking',
+      earlier: 'Earlier day',
+      later: 'Later day',
+      day: (day: string) => `Day ${day}`,
+      firstFree: (day: string) => `first free day: ${day}`,
+      dish: 'Dish',
+      big: 'Big dish',
+      small: 'Small dish',
+      included: 'included',
+      free: 'free',
+      coins: (n: string) => `${n} coins`,
+      photosHome: (n: string) => `about ${n} photos home`,
+      booked: 'BOOKED',
+      tooSoon: (day: string) => `Too soon: book from day ${day}.`,
+      conjunction: (day: string) => `No radio that day (solar conjunction). Try day ${day}.`,
+      afterEnd: 'That day is after the mission ends.',
+      already: 'Already booked',
+      book: (big: boolean) => `Book the ${big ? 'big' : 'small'} dish`,
+    },
+  };

@@ -1,0 +1,2210 @@
+// Words for the Signal Delay screens (design: docs/design/signal-delay). Numbers come from the engine and are only
+// formatted here, through format.ts. Cadet reads short uppercase lines; Engineer adds the numbers.
+import type { FailureEffect, OpsPhase } from '../engine/data';
+import type { ComingUpKind, ConsoleOutcome, FlyChip, RobotMessage, VoiceKind } from '../engine/ops/index';
+import type { DeckCard, FuelFix, LimitKey, PackBlockerCode, PartId } from '../engine/pack';
+import type { MeterStatus } from '../engine/types';
+import type { FinalTransmission, Hurt, ReportPanel, Saved } from '../engine/ops/report';
+import type { TargetBody } from '../engine/targets';
+import type { ObjectiveId } from '../engine/objectives';
+import type { RoleId } from '../engine/team/roles';
+import type { RealStorm } from '../engine/spaceWeather';
+import type { Category } from '../engine/scoring';
+import type { SDIconName } from './components/sd/SDIcon';
+import * as f from './format';
+import { live } from './i18n/live';
+
+export const GAME_NAME = 'SIGNAL DELAY';
+
+// ---------------------------------------------------------------------------
+// Fly & Survive
+
+export type TileKey = 'power' | 'fuel' | 'data' | 'systems';
+export const TILE: Record<TileKey, { name: string; icon: SDIconName; help: string }> = {
+  power: { name: 'POWER', icon: 'power', help: 'Power to spare today' },
+  fuel: { name: 'FUEL', icon: 'fuel', help: 'Fuel left in the tank' },
+  data: { name: 'DATA', icon: 'data', help: 'Science sent home, against the goal' },
+  systems: { name: 'SYSTEMS', icon: 'sys', help: 'How healthy the robot is' },
+};
+
+/** Short card labels in the design's voice; the engine's own label is the fallback. */
+export const OPTION_SHORT: Record<string, string> = {
+  'solar-storm.shelter': 'SHIELD UP',
+  'solar-storm.keep-observing': 'KEEP WORKING',
+  'cme-shock.safe-mode': 'SAFE MODE',
+  'cme-shock.keep-observing': 'WATCH IT HIT',
+  'mars-dust-storm.raise-periapsis': 'CLIMB HIGHER',
+  'mars-dust-storm.wait-it-out': 'WAIT IT OUT',
+  'mars-dust-storm.carry-on': 'CARRY ON',
+  'debris.hide': 'HIDE BEHIND THE PLANET',
+  'debris.edge-on': 'TURN EDGE-ON',
+  'debris.ignore': 'DO NOTHING',
+  'reaction-wheel.thrusters': 'USE THRUSTERS',
+  'reaction-wheel.hybrid': 'NEW POINTING PLAN',
+  'reaction-wheel.carry-on': 'KEEP GOING',
+  'memory-corruption.backup-computer': 'SPARE COMPUTER',
+  'memory-corruption.patch': 'SEND A PATCH',
+  'memory-corruption.reboot': 'REBOOT',
+  'insertion-anomaly.trim-burn': 'TRIM BURN',
+  'insertion-anomaly.accept-orbit': 'KEEP THIS ORBIT',
+  'insertion-anomaly.hold': 'HOLD STILL',
+  'drag-heating.pop-up': 'RAISE THE PERIAPSIS NOW',
+  'drag-heating.stay-low': 'STAY LOW AND FINISH THE PICTURE',
+};
+
+export const optionShort = live('optionShort', (type: string, id: string, label: string) => OPTION_SHORT[`${type}.${id}`] ?? label.toUpperCase());
+
+export const EFFECT_ICON: Record<FailureEffect, SDIconName> = { craft: 'sys', instrument: 'camera', 'stored-data': 'data', 'safe-mode': 'sys' };
+export const CHIP_ICON: Record<FlyChip['gauge'], SDIconName> = { fuel: 'fuel', data: 'data', coins: 'star' };
+
+/** "IN 30 HOURS", or "NOW" once the danger has struck. */
+export const arrivesWords = live('arrivesWords', (s: number) => (s < 60 ? 'NOW' : `IN ${f.durationWords(s)}`));
+
+export const COMING: Record<ComingUpKind, { label: (dest: string) => string; short: (dest: string) => string; icon: SDIconName }> = {
+  eclipse: { label: () => 'ECLIPSE SEASON', short: () => 'DARK', icon: 'eclipse' },
+  conjunction: { label: () => 'SUN BLOCKS RADIO', short: () => 'SUN', icon: 'conj' },
+  'course-fix': { label: () => 'COURSE FIX', short: () => 'FIX', icon: 'burn' },
+  arrival: { label: (d) => `ARRIVE AT ${d.toUpperCase()}`, short: (d) => d.toUpperCase(), icon: 'orbit' },
+  'dust-season': { label: () => 'DUST STORM SEASON', short: () => 'DUST', icon: 'dust' },
+};
+
+export const monthsWords = live('monthsWords', (m: number) => `${f.num(m)} ${m === 1 ? 'MONTH' : 'MONTHS'}`);
+export const monthsShort = live('monthsShort', (m: number) => `${f.num(m)}MO`);
+
+/** The CRT log line when nothing else is happening. */
+function quietLineEn(phase: OpsPhase, dest: string): string {
+  const d = dest.toUpperCase();
+  switch (phase) {
+    case 'launch':
+      return 'LIFTOFF. THE ROBOT IS ON ITS WAY.';
+    case 'cruise':
+      return `CRUISING TO ${d}. ALL QUIET.`;
+    case 'arrival':
+      return `ARRIVING AT ${d}.`;
+    case 'science':
+      return `IN ORBIT AT ${d}. SCIENCE RUNNING.`;
+    case 'return':
+      return 'HEADING HOME.';
+    case 'extended':
+      return 'EXTENDED MISSION. STILL FLYING.';
+  }
+}
+export const quietLine = live('quietLine', quietLineEn);
+
+export const milestoneLine = live('milestoneLine', (kind: 'arrival' | 'prime-end' | 'extension-end' | undefined, inDays: number | undefined, dest: string): string => {
+  if (kind === 'arrival' && inDays !== undefined) return `${dest.toUpperCase()} IN ${f.num(inDays)} ${inDays === 1 ? 'DAY' : 'DAYS'}`;
+  if (kind === 'prime-end' && inDays !== undefined) return `SCIENCE ENDS IN ${f.num(inDays)} DAYS`;
+  if (kind === 'extension-end' && inDays !== undefined) return `EXTENSION ENDS IN ${f.num(inDays)} DAYS`;
+  return `AT ${dest.toUpperCase()}`;
+});
+
+const EFFECT_LINE: Record<FailureEffect, string> = {
+  craft: 'CONTACT LOST. THE ROBOT IS GONE.',
+  instrument: 'AN INSTRUMENT IS BROKEN FOR GOOD.',
+  'stored-data': 'THE PHOTOS ON BOARD WERE WIPED.',
+  'safe-mode': 'THE ROBOT HID IN SAFE MODE.',
+};
+
+/** The INCOMING teletype after an order lands: what happened, in short lines. */
+function resultLinesEn(o: ConsoleOutcome, shortLabel: string): string[] {
+  const lines: string[] = [];
+  if (o.by === 'standing-order') lines.push(`NO ORDER IN TIME. THE ROBOT FOLLOWED ITS STANDING ORDER: ${shortLabel}.`);
+  else if (o.by === 'fault-protection') lines.push(`NO ORDER IN TIME. THE ROBOT CHOSE: ${shortLabel}.`);
+  else lines.push(`ORDER CARRIED OUT: ${shortLabel}.`);
+  lines.push(o.bad ? `${o.title.toUpperCase()} HIT HARD.` : `${o.title.toUpperCase()} PASSED.`);
+  if (o.bad) lines.push(EFFECT_LINE[o.failureEffect]);
+  else lines.push('ALL SYSTEMS SAFE.');
+  if (o.scienceDaysLost > 0) lines.push(`YOU MISSED ${f.num(o.scienceDaysLost)} ${o.scienceDaysLost === 1 ? 'DAY' : 'DAYS'} OF SCIENCE.`);
+  if (o.deltaV_ms > 0) lines.push(`ENGINE FIRED: ${f.speed(o.deltaV_ms).toUpperCase()}.`);
+  return lines;
+}
+export const resultLines = live('resultLines', resultLinesEn);
+
+export const RESULT_EFFECT_CHIP: Record<FailureEffect, string> = {
+  craft: 'ROBOT LOST',
+  instrument: 'INSTRUMENT LOST',
+  'stored-data': 'PHOTOS WIPED',
+  'safe-mode': 'SAFE MODE',
+};
+
+// ---------------------------------------------------------------------------
+// Pack
+
+
+export const PART_LOOK: Record<PartId, { name: string; short: string; icon: SDIconName; color: string }> = {
+  computer: { name: 'Flight computer', short: 'BRAIN', icon: 'computer', color: 'var(--sd-part-brain)' },
+  engine: { name: 'Main engine', short: 'ENGINE', icon: 'burn', color: 'var(--sd-part-drive)' },
+  camera: { name: 'Camera', short: 'CAMERA', icon: 'camera', color: 'var(--sd-part-science)' },
+  spectrometer: { name: 'Spectrometer', short: 'SPECTRO', icon: 'data', color: 'var(--sd-part-science)' },
+  magnetometer: { name: 'Magnetometer', short: 'MAG', icon: 'orbit', color: 'var(--sd-part-science)' },
+  radar: { name: 'Radar sounder', short: 'RADAR', icon: 'data', color: 'var(--sd-part-science)' },
+  sniffer: { name: 'Air sniffer (MAVEN suite)', short: 'SNIFFER', icon: 'data', color: 'var(--sd-part-science)' },
+  dish: { name: 'Big dish antenna', short: 'DISH', icon: 'dish', color: 'var(--sd-part-science)' },
+  solar: { name: 'Extra solar panel', short: 'SOLAR', icon: 'panel', color: 'var(--sd-part-power)' },
+  battery: { name: 'Big battery', short: 'BATTERY', icon: 'battery', color: 'var(--sd-part-power)' },
+  tank: { name: 'Extra fuel tank', short: 'FUEL', icon: 'tank', color: 'var(--sd-part-drive)' },
+  heater: { name: 'Heater pack', short: 'HEAT', icon: 'heater', color: 'var(--sd-part-guard)' },
+  shield: { name: 'Radiation shield', short: 'SHIELD', icon: 'shield', color: 'var(--sd-part-guard)' },
+  bumper: { name: 'Debris bumper', short: 'BUMPER', icon: 'shield', color: 'var(--sd-part-guard)' },
+  spare: { name: 'Spare computer', short: 'SPARE', icon: 'computer', color: 'var(--sd-part-brain)' },
+  autopilot: { name: 'Autopilot chip', short: 'AUTO', icon: 'computer', color: 'var(--sd-part-brain)' },
+};
+
+/** Science parts earn data (the green star badge). */
+export const SCIENCE_PARTS: PartId[] = ['camera', 'spectrometer', 'magnetometer', 'radar', 'sniffer', 'dish'];
+
+export const DANGER_LOOK: Record<string, { title: string; short: string; line: string; icon: SDIconName }> = {
+  eclipse: { title: 'ECLIPSE SEASON', short: 'ECLIPSE', line: 'The planet hides the Sun. Power runs low.', icon: 'eclipse' },
+  conjunction: { title: 'SUN IN THE WAY', short: 'SUN', line: 'No calls home for about two weeks.', icon: 'conj' },
+  'solar-storm': { title: 'RADIATION STORM', short: 'STORM', line: 'The Sun spits fast particles that fry electronics.', icon: 'storm' },
+  'cme-shock': { title: 'CME SHOCK', short: 'CME', line: 'A cloud of solar plasma slams into Mars.', icon: 'storm' },
+  'mars-dust-storm': { title: 'DUST STORM', short: 'DUST', line: 'Mars air swells and drags on low orbits.', icon: 'dust' },
+  debris: { title: 'COMET DUST', short: 'DEBRIS', line: 'Tiny grains hit faster than bullets.', icon: 'debris' },
+  'reaction-wheel': { title: 'WHEEL FAILURE', short: 'WHEEL', line: 'A spinning wheel that points the robot wears out.', icon: 'sys' },
+  'memory-corruption': { title: 'MEMORY GLITCH', short: 'MEMORY', line: 'Radiation flips bits in the computer.', icon: 'computer' },
+  'insertion-anomaly': { title: 'ARRIVAL BURN GOES WRONG', short: 'ARRIVAL', line: 'The braking burn does not go to plan.', icon: 'orbit' },
+};
+
+export const dangerLook = live('dangerLook', (id: string, title: string) => DANGER_LOOK[id] ?? { title: title.toUpperCase(), short: title.toUpperCase(), line: '', icon: 'sys' as SDIconName });
+
+function deckWhenEn(c: DeckCard): string {
+  if (c.kind === 'eclipse' || c.kind === 'conjunction') return 'CERTAIN · YOU CAN SEE IT COMING';
+  return c.detectedBy === 'earth' ? 'SURPRISE · WITH A WARNING' : 'SURPRISE · NO WARNING';
+}
+export const deckWhen = live('deckWhen', deckWhenEn);
+
+export const STAMP: Record<DeckCard['stamp'], { word: string; short: string; color: string }> = {
+  covered: { word: 'COVERED', short: 'OK', color: 'var(--sd-ok)' },
+  some: { word: 'SOME COVER', short: 'SOME', color: 'var(--sd-soso)' },
+  none: { word: 'NOT COVERED', short: 'NONE', color: 'var(--sd-bad)' },
+};
+
+export const PACK_BLOCKER: Record<PackBlockerCode, string> = {
+  'too-heavy': 'TOO HEAVY FOR THIS ROCKET',
+  'no-power': 'NOT ENOUGH POWER',
+  'no-fuel': 'NOT ENOUGH FUEL TO GET THERE',
+  'no-capture': 'THIS ENGINE CANNOT BRAKE INTO ORBIT',
+  'flight-too-long': 'THAT FLIGHT IS TOO LONG FOR THE GAME',
+  'no-science': 'PACK AT LEAST ONE INSTRUMENT',
+  'over-budget': 'OVER BUDGET: TAKE SOMETHING OUT',
+  other: 'NOT READY TO LAUNCH',
+};
+
+/** SCIENCE ORBIT on the Mars Pack (spec UI rule 59) and the desktop tabs beside MISSION LIMITS. */
+export const ORBIT_WORDS = {
+  title: 'SCIENCE ORBIT',
+  label: 'Science orbit',
+  names: { capture: 'STAY WHERE YOU ARRIVE', maven: 'MAVEN’S ORBIT', high: 'HIGH ORBIT' } as Record<string, string>,
+  lines: {
+    capture: 'No burn after arrival: the most fuel left, and Deimos is close. Phobos is far below.',
+    maven: 'Dips through the upper air, like MAVEN. Phobos is close; Deimos costs a lot of fuel.',
+    high: 'Above most of the air, up near Deimos. Deimos is close; Phobos costs more.',
+  } as Record<string, string>,
+  size: (low: string, high: string) => `${low} × ${high}`,
+  change: (dv: string) => `ORBIT CHANGE ${dv}`,
+  fuel: (pct: string) => `FUEL MARGIN ${pct}`,
+  moons: (phobos: string, deimos: string) => `PHOBOS ${phobos} · DEIMOS ${deimos}`,
+  drag: (x: string) => `AIR DRAG ×${x}`,
+  shadow: (t: string) => `LONGEST SHADOW ${t}`,
+};
+
+export const SIDE_TABS = {
+  label: 'Mission choices',
+  preview: 'PREVIEW',
+  dangers: 'DANGERS',
+  rocket: 'ROCKET',
+  orbit: 'ORBIT',
+};
+
+/** LIVE DESIGN PREVIEW on Pack (components/sd/LiveDesignPreview.tsx): the robot as packed, on top of its rocket. */
+export const PREVIEW_WORDS = {
+  title: 'LIVE DESIGN PREVIEW',
+  label: 'Live design preview: the robot as packed, on its rocket',
+  sub: 'Your robot, as packed right now.',
+  empty: 'Only the brain and the engine so far. Tap a part on the shelf to add it.',
+  parts: (n: string) => `${n} PARTS ON BOARD`,
+  on: (rocket: string) => `ON ${rocket.toUpperCase()}`,
+  /** The danger deck's drawer on a phone. */
+  deckOpen: 'SHOW THE DANGER DECK',
+};
+
+/** ROCKET on solo Pack (spec UI rule 58): lift, budget charge and flight record of each rocket on offer. */
+export const ROCKET_WORDS = {
+  title: 'ROCKET',
+  label: 'Rocket',
+  lifts: (kg: string) => `LIFTS ${kg}`,
+  tooHeavy: 'TOO HEAVY FOR IT',
+  standard: 'STANDARD · NO CHARGE',
+  charge: (money: string) => `${money} ON THE BUDGET`,
+  refund: (money: string) => `${money} ON THE BUDGET: CHEAPER`,
+  record: (ok: string, all: string) => `${ok} OF ${all} FLIGHTS WORKED`,
+  ride: 'SHARED RIDE · ',
+  curveTitle: (name: string) => `${name}: payload to C3`,
+};
+
+/** LAST FLIGHT on solo Pack and the report's NEXT TIME line (spec UI rule 60): change one thing and fly again. */
+export const LAST_WORDS = {
+  title: 'LAST FLIGHT',
+  label: 'Last flight',
+  stars: (n: string) => `${n} of 3 stars`,
+  science: (pct: string) => `${pct} OF THE SCIENCE HOME`,
+  change: (signed: string) => `${signed} VS LAST`,
+  limitChange: (signed: string) => `LIMIT ${signed}`,
+  nextTime: (part: string) => `NEXT TIME: PACK THE ${part.toUpperCase()}.`,
+};
+
+/** MISSION LIMITS on solo Pack (spec UI rule 57): weight, budget, power and data as bars. */
+export const LIMIT_WORDS = {
+  title: 'MISSION LIMITS',
+  label: 'Mission limits',
+  names: { weight: 'WEIGHT', budget: 'BUDGET', power: 'POWER', data: 'DATA' } as Record<LimitKey, string>,
+  value: {
+    weight: (used: string, limit: string) => `${used} OF ${limit}`,
+    budget: (used: string, limit: string) => `${used} OF ${limit}`,
+    power: (used: string, limit: string) => `NEEDS ${used} · HAS ${limit}`,
+    data: (used: string, limit: string) => `${used} OF ${limit} A DAY`,
+  } as Record<LimitKey, (used: string, limit: string) => string>,
+  status: { ok: 'FINE', warning: 'NEARLY FULL', over: 'OVER' } as Record<MeterStatus, string>,
+  preview: (part: string) => `IF YOU PACK: ${part.toUpperCase()}`,
+  bar: (name: string, value: string, status: string) => `${name}: ${value}, ${status}`,
+};
+
+export const PACK_WORDS = {
+  noRoom: 'NO ROOM IN THE NOSE',
+  step: 'PACK',
+  shelf: 'PARTS SHELF',
+  shelfLabel: 'Parts shelf',
+  tapToPack: 'TAP TO PACK',
+  shelfEmpty: 'SHELF EMPTY. EVERYTHING IS PACKED.',
+  pack: (name: string, fits: boolean) => `Pack ${name}${fits ? '' : ' (no room)'}`,
+  fits: (n: string) => `FITS · ${n} SQUARES`,
+  fitsShort: (n: string) => `${n} SQ`,
+  wontFit: 'WON’T FIT',
+  noRoomShort: 'NO ROOM',
+  earnsData: 'Earns data',
+  covers: (danger: string) => `Covers ${danger.toLowerCase()}`,
+  /** The nose and the weight meter. */
+  fairing: 'Nose and weight',
+  nose: 'ROCKET NOSE',
+  noseLabel: 'Rocket nose',
+  noseState: (state: string) => `Nose: ${state}`,
+  full: 'FULL · NOTHING ELSE FITS',
+  fullShort: 'FULL',
+  left: (n: string) => `${n} SQUARES LEFT`,
+  alwaysPacked: (name: string) => `${name} · always packed`,
+  alwaysPackedLabel: (name: string) => `${name} (always packed)`,
+  tapToUnpack: (name: string) => `${name} · tap to unpack`,
+  unpack: (name: string) => `Unpack ${name}`,
+  weight: 'WEIGHT',
+  weightLabel: 'Weight',
+  /** The danger deck. */
+  deck: 'Danger deck',
+  deckOf: (dest: string) => `DANGER DECK · ${dest.toUpperCase()}`,
+  deckLabel: (dest: string) => `Danger deck: ${dest}`,
+  deckSub: 'Face up. You know what’s coming.',
+  /** The launch panel (Pack and Launch Day). */
+  checklist: 'Launch checklist',
+  arm: 'ARM',
+  armLabel: 'Arm',
+  launch: 'LAUNCH',
+  lesson: (title: string) => `LESSON · ${title.toUpperCase()}`,
+  lessonTitle: 'the lesson',
+  lessonLearned: '★ LESSON LEARNED',
+};
+
+/** The top bar's brand: the game's name goes Home; under it, the mission and where it flies. */
+export const BRAND_WORDS = {
+  home: 'Signal Delay: home',
+  sub: (mission: string, dest: string) => `${mission.toUpperCase()} · TO ${dest.toUpperCase()}`,
+};
+
+/** PACK — FLY — REPORT (BUILD in Engineer mode). */
+export const STEP_WORDS = { label: 'Mission steps', pack: 'PACK', build: 'BUILD', fly: 'FLY', report: 'REPORT' };
+
+/** "No fuel" with the part that clears it (engine packBlockers `fix`), so the player learns why. */
+function fuelFixWordsEn(fix: FuelFix): string {
+  const pack = `PACK THE ${PART_LOOK[fix.part].name.toUpperCase()}`;
+  return fix.why === 'station-keeping' ? `${pack} — THE ${f.km(fix.orbitAlt_m).toUpperCase()} ORBIT NEEDS TRIM BURNS EVERY MONTH` : pack;
+}
+export const fuelFixWords = live('fuelFixWords', fuelFixWordsEn);
+
+export const DAY_WORDS: Record<'good' | 'soso' | 'bad', { msg: (dest: string) => string; short: string }> = {
+  good: { msg: (d) => `GOOD DAY · ${d.toUpperCase()} IS IN REACH`, short: 'GOOD' },
+  soso: { msg: () => 'SO-SO · LITTLE TO SPARE', short: 'SO-SO' },
+  bad: { msg: (d) => `BAD DAY · ${d.toUpperCase()} IS OUT OF REACH`, short: 'BAD' },
+};
+
+/** The Launch Day step, and the one-line launch day on Pack (spec UI rules 24 and 26). */
+export const LAUNCH_DAY_WORDS = {
+  title: 'LAUNCH DAY',
+  head: (span: string) => `LAUNCH DAY · ${span}`,
+  daysLabel: 'Launch day',
+  sub: 'Six weeks of launch days. Green: an easy trip. Amber: little to spare. Red: out of reach.',
+  line: 'LAUNCH DAY',
+  auto: 'BEST DAY · PICKED FOR YOU',
+  yours: 'YOUR PICK',
+  change: 'CHANGE ▸',
+  arrives: 'ARRIVES',
+  flight: 'FLIGHT',
+  best: 'BEST DAY',
+  useBest: 'USE THE BEST DAY',
+  working: 'WORKING OUT THE LAUNCH DAYS…',
+  c3: 'C3 · v∞ ARRIVAL',
+  margins: 'MARGINS · MASS · Δv',
+};
+
+export const WEIGHT_WORDS: Record<'ok' | 'warning' | 'over', string> = {
+  ok: 'LIGHT ENOUGH',
+  warning: 'NEARLY TOO HEAVY',
+  over: 'TOO HEAVY FOR THIS ROCKET',
+};
+
+/** "NOV 1" from an ISO date. */
+export const shortDate = live('shortDate', (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase());
+/** A date with its year, in words: "Dec 11, 1998" (format.ts isoDate). */
+export const fullDate = live('fullDate', (iso: string) => f.isoDate(iso));
+/** A count of days in a readout: "365 days" (format.ts days). */
+export const dayCount = live('dayCount', (n: number) => f.days(n));
+/** A date as the CRT prints it: "21 OCT 2026" (format.ts crtDate). */
+export const crtDate = live('crtDate', (iso: string) => f.crtDate(iso));
+/** "NOV–DEC 2013" for the calendar head. */
+function monthSpanEn(fromIso: string, toIso: string): string {
+  const m = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  const y = toIso.slice(0, 4);
+  return m(fromIso) === m(toIso) ? `${m(fromIso)} ${y}` : `${m(fromIso)}–${m(toIso)} ${y}`;
+}
+export const monthSpan = live('monthSpan', monthSpanEn);
+
+// ---------------------------------------------------------------------------
+// Mission Report
+
+
+const hazardTitle = (type: string, title: string) => (DANGER_LOOK[type]?.title ?? title.toUpperCase());
+
+export interface PanelWords {
+  head: string;
+  text: string;
+}
+
+/** Caption for a comic panel. `label` gives a choice's short label, `title` a hazard's engine title. */
+function panelWordsEn(
+  p: ReportPanel,
+  ctx: { dest: string; rocket: string; label: (type: string, id: string) => string; title: (type: string) => string; autopilot: boolean; sent_Gbit: number },
+): PanelWords {
+  const day = `DAY ${f.num(p.day)}`;
+  switch (p.kind) {
+    case 'launch':
+      return { head: `${day} · LIFTOFF`, text: `Off the pad on an ${ctx.rocket}. The robot is on its own now.` };
+    case 'launch-failed':
+      return { head: `${day} · LAUNCH FAILED`, text: 'The rocket failed on launch day. Rockets are not perfect.' };
+    case 'not-launched':
+      return { head: `${day} · NOT LAUNCHED`, text: 'The craft never left the ground.' };
+    case 'hazard': {
+      const t = hazardTitle(p.hazardType!, ctx.title(p.hazardType!));
+      const label = ctx.label(p.hazardType!, p.optionId!);
+      const how = p.bad ? `It went wrong: ${RESULT_EFFECT_CHIP[p.effect ?? 'safe-mode'].toLowerCase()}.` : 'It worked.';
+      const who =
+        p.by === 'standing-order' ? `The robot followed its order: ${label}.` : p.by === 'fault-protection' ? `No order in time. The robot chose: ${label}.` : `You chose: ${label}.`;
+      return { head: `${day} · ${t}`, text: `${who} ${how}` };
+    }
+    case 'arrival':
+      return { head: `${day} · ARRIVE AT ${ctx.dest.toUpperCase()}`, text: `A long braking burn. ${ctx.dest} caught you.` };
+    case 'conjunction':
+      return {
+        head: `${day} · SUN IN THE WAY`,
+        text: `No radio for ${f.num(p.blackoutDays ?? 0)} days. ${ctx.autopilot ? 'The autopilot flew alone.' : 'The robot waited it out.'}`,
+      };
+    case 'lost':
+      return { head: `${day} · CONTACT LOST`, text: 'The robot went silent. Nobody heard it again.' };
+    case 'complete':
+      return { head: `${day} · MISSION COMPLETE`, text: `Science done: ${f.gbit(ctx.sent_Gbit)} sent home.` };
+  }
+}
+export const panelWords = live('panelWords', panelWordsEn);
+
+export const PANEL_SOUND: Partial<Record<string, string>> = {
+  'solar-storm': 'ZZZT!',
+  'cme-shock': 'WHUMP!',
+  'mars-dust-storm': 'WHOOOSH',
+  debris: 'PING!',
+  'reaction-wheel': 'GRRRK',
+  'memory-corruption': 'BEEP?',
+  'insertion-anomaly': 'FWUMP',
+};
+
+/** The three stars (v0.8: they follow the science returned; the rules are the engine's STAR_RULES). */
+export const STAR_WORDS = live('STAR_WORDS', (_dest: string) => ['FIRST SCIENCE HOME', 'HALF THE SCIENCE', 'MOST OF THE SCIENCE'] as const);
+
+const CATEGORY_WORD: Record<Category, string> = {
+  science: 'science sent home',
+  success: 'mission phases',
+  budget: 'the budget',
+  deltaV: 'the fuel margin',
+  power: 'the power margin',
+  mass: 'the weight margin',
+  crisis: 'crisis handling',
+};
+export const CATEGORY_NAME: Record<Category, string> = {
+  science: 'SCIENCE',
+  success: 'SUCCESS',
+  budget: 'BUDGET',
+  deltaV: 'Δv MARGIN',
+  power: 'POWER MARGIN',
+  mass: 'MASS MARGIN',
+  crisis: 'CRISIS HANDLING',
+};
+
+function savedWordsEn(v: Saved, ctx: { label: (type: string, id: string) => string; title: (type: string) => string }): { strong: string; rest: string } {
+  switch (v.code) {
+    case 'part':
+      return { strong: `The ${PART_LOOK[v.part].name.toLowerCase()}`, rest: `. It made the ${hazardTitle(v.hazardType, ctx.title(v.hazardType)).toLowerCase()} far less dangerous.` };
+    case 'autopilot':
+      return { strong: 'The autopilot chip', rest: `. It answered the ${hazardTitle(v.hazardType, ctx.title(v.hazardType)).toLowerCase()} on its own.` };
+    case 'choice':
+      return { strong: `Choosing “${ctx.label(v.hazardType, v.optionId).toLowerCase()}”`, rest: ` when the ${hazardTitle(v.hazardType, ctx.title(v.hazardType)).toLowerCase()} came.` };
+    case 'quiet':
+      return { strong: 'Good planning', rest: '. Nothing went wrong this time.' };
+  }
+}
+export const savedWords = live('savedWords', savedWordsEn);
+
+function hurtWordsEn(v: Hurt, ctx: { label: (type: string, id: string) => string; title: (type: string) => string }): { strong: string; rest: string } {
+  switch (v.code) {
+    case 'bad-outcome':
+      return {
+        strong: `“${ctx.label(v.hazardType, v.optionId).toLowerCase()}”`,
+        rest: ` in the ${hazardTitle(v.hazardType, ctx.title(v.hazardType)).toLowerCase()}: ${RESULT_EFFECT_CHIP[v.effect].toLowerCase()}.`,
+      };
+    case 'category':
+      return { strong: CATEGORY_WORD[v.category], rest: ` scored only ${f.num(v.score)} out of 100.` };
+    case 'nothing':
+      return { strong: 'Nothing big', rest: '. Every score was fair or better.' };
+  }
+}
+export const hurtWords = live('hurtWords', hurtWordsEn);
+
+export const REPORT_STAMP: Record<'complete' | 'extended' | 'lost' | 'not-launched', { word: string[]; color: string }> = {
+  complete: { word: ['MISSION', 'COMPLETE'], color: 'var(--sd-ok)' },
+  extended: { word: ['MISSION', 'EXTENDED'], color: 'var(--sd-soso)' },
+  lost: { word: ['ROBOT', 'LOST'], color: 'var(--sd-red)' },
+  'not-launched': { word: ['NOT', 'LAUNCHED'], color: 'var(--sd-red)' },
+};
+
+/**
+ * FINAL TRANSMISSION (Mission Report, design TELETYPE 03): the robot's last message, line by line (engine
+ * finalTransmission). Templates with named slots, like the robot's voice: {day} {dest} {name} {science} {hazard}
+ * {when} {option} {part} {dv} {days} {fuel} {years} {delay}.
+ */
+export const FINAL_WORDS = {
+  kicker: (day: string) => `TELETYPE 03 · RECEIVED DAY ${day}`,
+  incomplete: 'INCOMPLETE',
+  sent: (delay: string) => `SENT ${delay} BEFORE IT PRINTED`,
+  title: (name: string) => `FINAL TRANSMISSION — ${name}`,
+  opening: {
+    complete: 'DAY {day}. I SAW {dest} FOR {science} DAYS.',
+    lost: 'DAY {day}. THIS IS {name}. ARE YOU THERE?',
+    extended: 'DAY {day}. PRIMARY MISSION COMPLETE. THE EXTENSION TOO.',
+  },
+  hurt: 'THE {hazard} ON DAY {when} HURT ME. {effect}',
+  effect: {
+    craft: 'I NEARLY DID NOT MAKE IT.',
+    instrument: 'ONE INSTRUMENT NEVER WOKE UP.',
+    'stored-data': 'THE DATA I WAS HOLDING IS GONE.',
+    'safe-mode': 'I HID IN SAFE MODE FOR DAYS.',
+  } satisfies Record<FailureEffect, string>,
+  saved: {
+    part: 'THE {part} TOOK THE {hazard} FOR ME.',
+    autopilot: 'NO ORDER COULD REACH ME IN TIME. THE AUTOPILOT CHIP FLEW ME THROUGH THE {hazard}.',
+    choice: 'ON DAY {when} YOU CHOSE {option}. IT SAVED ME.',
+  },
+  arrival: 'YOU SENT ME IN WITH A {dv} BURN. {dest} CAUGHT ME ON THE FIRST TRY.',
+  conjunction: 'FOR {days} DAYS THE SUN STOOD BETWEEN US. I FLEW MYSELF.',
+  quiet: 'NOTHING BROKE. NOT ONCE.',
+  fuel: '{fuel} OF FUEL LEFT. BATTERY HOLDING.',
+  extension: 'EXTENSION FLOWN: {years} MORE THAN PLANNED.',
+  signOff: 'PRIMARY MISSION COMPLETE. {name} OUT.',
+  cause: {
+    hazard: 'THE {hazard} WAS TOO MUCH. SYSTEMS FAILING.',
+    fuel: 'MY TANK IS EMPTY. I CANNOT HOLD MY COURSE.',
+    power: 'NO POWER FOR {days} DAYS. BATTERY ALMOST GONE.',
+    unknown: 'SOMETHING IS WRONG. SYSTEMS FAILING.',
+  },
+  /** Broken off mid-word on purpose: the signal ends here. */
+  cutOff: 'TURNING MY ANTENNA TO WHERE EARTH SHOULD B',
+  lost: '— SIGNAL LOST —',
+  still: 'STILL HERE.',
+  foot: {
+    complete: 'The last words were already {delay} old when the paper moved.',
+    lost: 'The Deep Space Network kept listening. Nothing else came.',
+    extended: 'Not a goodbye after all: the mission is over, the robot is not.',
+  },
+  feed: 'FEED THE PAPER · MISSION REPORT ▾',
+  label: 'Final transmission',
+};
+
+/** Every line of a final transmission, in words. */
+function finalLinesEn(
+  ft: FinalTransmission,
+  ctx: { dest: string; name: string; title: (type: string) => string; label: (type: string, id: string) => string },
+): string[] {
+  const W = FINAL_WORDS;
+  const years = (n: number) => `${f.num(n)} ${n === 1 ? 'YEAR' : 'YEARS'}`;
+  return ft.lines.map((l) => {
+    const v = l.values;
+    const hazard = v.hazardType ? hazardTitle(v.hazardType, ctx.title(v.hazardType)).toUpperCase() : '';
+    const slots: Record<string, string> = {
+      dest: ctx.dest.toUpperCase(),
+      name: ctx.name.toUpperCase(),
+      hazard,
+      ...(v.day !== undefined ? { day: f.dayPad(v.day), when: f.num(v.day) } : {}),
+      ...(v.scienceDays !== undefined ? { science: f.num(v.scienceDays) } : {}),
+      ...(v.dv_ms !== undefined ? { dv: f.speed(v.dv_ms).toUpperCase() } : {}),
+      ...(v.days !== undefined ? { days: f.num(v.days) } : {}),
+      ...(v.propellantLeft_kg !== undefined ? { fuel: f.kg(v.propellantLeft_kg).toUpperCase() } : {}),
+      ...(v.years !== undefined ? { years: years(v.years) } : {}),
+    };
+    switch (l.kind) {
+      case 'opening':
+        return fill(W.opening[ft.ending], slots);
+      case 'hurt':
+        return fill(W.hurt, { ...slots, effect: v.effect ? W.effect[v.effect] : '' }).trim();
+      case 'saved': {
+        const s = v.saved!;
+        if (s.code === 'part') return fill(W.saved.part, { ...slots, part: PART_LOOK[s.part].name.toUpperCase(), hazard: hazardTitle(s.hazardType, ctx.title(s.hazardType)).toUpperCase() });
+        if (s.code === 'autopilot') return fill(W.saved.autopilot, { ...slots, hazard: hazardTitle(s.hazardType, ctx.title(s.hazardType)).toUpperCase() });
+        if (s.code === 'choice') return fill(W.saved.choice, { ...slots, option: ctx.label(s.hazardType, s.optionId).toUpperCase() });
+        return W.quiet;
+      }
+      case 'arrival':
+        return fill(W.arrival, slots);
+      case 'conjunction':
+        return fill(W.conjunction, slots);
+      case 'quiet':
+        return W.quiet;
+      case 'fuel':
+        return fill(W.fuel, slots);
+      case 'extension':
+        return fill(W.extension, slots);
+      case 'sign-off':
+        return fill(W.signOff, slots);
+      case 'cause':
+        return fill(W.cause[v.cause ?? 'unknown'], slots);
+      case 'cut-off':
+        return W.cutOff;
+    }
+  });
+}
+export const finalLines = live('finalLines', finalLinesEn);
+
+// ---------------------------------------------------------------------------
+// Briefings, coach panels, launch checklist and navigation (plain words for every player)
+
+export interface Briefing {
+  /** What the player has to do, in one or two sentences. */
+  job: string;
+  /** One tip that helps on this mission. */
+  tip: string;
+}
+
+export const BRIEFING: Record<string, Briefing> = {
+  'moon-1': {
+    job: 'Send a small robot to the Moon and keep it charged while it takes pictures.',
+    tip: 'Pack solar wings and a battery. The robot needs power in the Moon’s shadow too.',
+  },
+  'moon-2': {
+    job: 'Reach the Moon with enough fuel to slow down and stay in orbit.',
+    tip: 'Fuel is heavy, and the rocket has to lift every bit of it. Watch the weight meter.',
+  },
+  'moon-3': {
+    job: 'Build the whole robot yourself: science, power, radio and fuel. Then fly it.',
+    tip: 'Science parts collect data. A bigger dish sends it home faster.',
+  },
+  mars: {
+    job: 'Fly a robot to Mars and keep it alive while it studies the planet.',
+    tip: 'Mars is minutes away by radio, so your orders arrive late. Answer danger cards early.',
+  },
+  venus: {
+    job: 'Send a radar robot to cloudy Venus without running out of money.',
+    tip: 'This level’s budget is small: not every instrument fits it. Watch the BUDGET bar; a robot that breaks earns nothing.',
+  },
+  bennu: {
+    job: 'Meet a small asteroid, study it and bring a pebble sample home.',
+    tip: 'An asteroid has almost no gravity. Spare fuel keeps you safe close to it.',
+  },
+  jupiter: {
+    job: 'Find out if any rocket can send a robot straight from Earth to Jupiter.',
+    tip: 'If nothing fits on the weight meter, that is the lesson: real missions swing past other planets first.',
+  },
+};
+
+export const FREE_BRIEFING: Briefing = {
+  job: 'Build any robot you like, launch it and keep it alive until the mission ends.',
+  tip: 'Pack parts that cover the dangers on the right. Each one shows which danger it helps with.',
+};
+
+export const DAILY_BRIEFING: Briefing = {
+  job: 'Today’s mission is the same for every player. Keep the robot alive and compare your result.',
+  tip: 'You only get one try a day, so read each danger card before you choose.',
+};
+
+/** A DONKI time as the record writes it: "2024-05-10 17:00 UTC". */
+const donkiTime = (t: string) => t.replace('T', ' ').replace('Z', ' UTC');
+
+/** The Daily's space weather (spec UI rule 37): real DONKI storms, or the seeded stand-in when the file can't be read. */
+export const LIVE_WEATHER = {
+  live: 'LIVE SUN · NASA DONKI',
+  /** The danger card's "arrives in" ⓘ title for a real CME. */
+  prediction: 'NASA WSA-ENLIL MODEL PREDICTION',
+  /** ENLIL severity on a real CME card. */
+  severity: { direct: 'DIRECT HIT', glancing: 'GLANCING BLOW', minor: 'MINOR IMPACT' },
+  /** Context: the flare a real storm came from. */
+  fromFlare: (cls: string) => `From a ${cls} flare.`,
+  offline: 'OFFLINE — SIMULATED WEATHER',
+  homeLive: 'Same mission for everyone today, with this week’s real solar storms.',
+  homeOffline: 'Same mission for everyone today. Offline — simulated weather.',
+  briefLive: 'The solar storms on this flight really happened on the Sun this week. NASA’s DONKI database recorded them; tap ⓘ on a storm card to see the record.',
+  briefOffline: 'Offline — simulated weather. The real space-weather file could not be read, so today’s storms are made up.',
+  realKicker: 'DANGER CARD · REAL SUN',
+  /** What DONKI observed, on a real storm's card (the same words as the engine's record, spaceWeather.ts stormSourced). */
+  event: (s: RealStorm) =>
+    `${
+      s.kind === 'sep'
+        ? `Solar energetic particle event on ${donkiTime(s.time)}${s.instruments?.length ? `, seen by ${s.instruments.join(', ')}` : ''}`
+        : `Coronal mass ejection${s.speed_kms !== undefined ? ` at ${f.num(s.speed_kms)} km/s` : ''} on ${donkiTime(s.time)}`
+    }${s.flare ? `, from a ${s.flare} solar flare` : ''}`,
+  realEvent: 'REAL EVENT · NASA DONKI',
+  realOn: 'REAL',
+  shareLive: '☀️ real Sun · NASA DONKI',
+  shareOffline: '☁️ offline · simulated weather',
+};
+
+/** The four steps of every mission. */
+export const MISSION_STEPS_WORDS: { word: string; line: string }[] = [
+  { word: 'PACK', line: 'Choose the parts that fit in the rocket nose.' },
+  { word: 'LAUNCH', line: 'Pick a green launch day, flip ARM, press LAUNCH.' },
+  { word: 'FLY', line: 'Let time run. Answer danger cards when they appear.' },
+  { word: 'REPORT', line: 'See how you did and earn stars.' },
+];
+
+/** How the three stars are earned, in plain words (the rules are the engine's STAR_RULES). */
+export const STAR_GOALS = live('STAR_GOALS', (dest: string): string[] => [
+  `Reach ${dest} and send the first science home.`,
+  'Bring half of the mission science home.',
+  'Bring most of the mission science home.',
+]);
+
+/** A real mission that flew there, for the briefing. */
+export const REAL_MISSION_LINE = live('REAL_MISSION_LINE', (label: string) => `Real NASA mission that flew there: ${label}.`);
+
+export interface CoachPanel {
+  icon: SDIconName;
+  title: string;
+  body: string;
+}
+
+/** How to fly: the coach panels on the first flight, the ? button and HOW TO PLAY. */
+export const COACH: CoachPanel[] = [
+  { icon: 'play', title: 'LET TIME RUN', body: 'Press 10×, 100× or 1000× at the bottom to fly. Press II to pause. Time keeps going after each card.' },
+  { icon: 'storm', title: 'DANGER CARDS', body: 'When trouble is coming, time stops and a card appears. Pick an answer. Each one shows what it costs.' },
+  { icon: 'dish', title: 'ORDERS TRAVEL SLOWLY', body: 'Your order crosses space at the speed of light. It can take minutes to reach the robot, so act early.' },
+  { icon: 'power', title: 'WATCH THE FOUR BARS', body: 'Power, fuel, data and systems are at the top. Keep them out of the red.' },
+  { icon: 'postcard', title: 'YOUR ROBOT WRITES HOME', body: 'Its messages cross space at the speed of light too. When its science reaches Earth, you get real NASA postcards.' },
+  { icon: 'star', title: 'REACH THE END', body: 'When the mission ends you get your report and stars. In a hurry? FINISH MISSION lets the robot fly the rest.' },
+];
+
+export const HOW_TO_PLAY = { label: 'HOW TO PLAY', sub: 'New here? Learn the game in one minute.' };
+
+/** MARS RIGHT NOW on Home (engine marsNow: today's JPL ephemeris, no internet needed). */
+/** Home's second row (spec UI rule 28): the smaller keys after PLAY and the DAILY. */
+export const HOME_WORDS = {
+  more: 'More',
+  kicker: 'MISSION CONTROL · DEEP SPACE',
+  pitch: 'YOU DON’T FLY THE ROCKET. YOU KEEP A ROBOT ALIVE MILLIONS OF KM AWAY, AND EVERY ORDER ARRIVES MINUTES LATE.',
+  play: 'PLAY',
+  playLabel: (n: string, title: string) => `Play: mission ${n}, ${title}`,
+  mission: (n: string, title: string) => `Mission ${n} · ${title}`,
+  choose: 'CHOOSE A MISSION ▸',
+  /** The demo order on the CRT. */
+  order: 'ORDER: TURN ON CAMERA',
+  untilHeard: 'UNTIL THE ROBOT HEARS YOU',
+  received: 'RECEIVED ✓',
+  earth: 'EARTH',
+  daily: 'DAILY MISSION',
+  dailySub: (n: string, weather: string) => `Daily #${n}. ${weather}`,
+  dailyQuiet: 'Same mission for everyone today.',
+  dailyDone: 'DONE ✓',
+  dailyNew: 'NEW TODAY',
+  rescue: 'RESCUE HISTORY',
+  rescueSub: 'Real robots that nearly died. Try to save them.',
+  count: (got: string, total: string) => `${got} OF ${total}`,
+};
+
+/** The CADET / ENGINEER lever. */
+export const MODE_WORDS = { cadet: 'CADET', engineer: 'ENGINEER', short: 'ENG', kids: 'SPACE KIDS', kidsLabel: 'Space Kids: a first space mission with the robot, for ages four to ten' };
+
+/**
+ * SPACE KIDS (screens/KidsMode.tsx): Cadet's loop for young children (pick a place, pack, fly, a picture report).
+ * Short words, no numbers, no gauges.
+ */
+export const KIDS_WORDS = {
+  title: 'SPACE KIDS',
+  hello: 'Hi! I am a space robot.',
+  helpMe: 'Will you help me fly my first mission?',
+  start: "LET'S GO!",
+  where: 'Where shall we fly? These are real NASA photos!',
+  places: { moon: 'The Moon', mars: 'Mars' },
+  pack: 'Fill my rocket! Tap what I should take.',
+  parts: {
+    camera: { name: 'Camera', says: 'A camera, to take pictures!' },
+    solar: { name: 'Sun panels', says: 'Sun panels make power from sunlight!' },
+    battery: { name: 'Battery', says: 'A battery keeps me going in the dark!' },
+    dish: { name: 'Big radio', says: 'A big radio, to call home!' },
+    shield: { name: 'Shield', says: 'A shield keeps me safe from Sun storms!' },
+  } as Record<string, { name: string; says: string }>,
+  out: 'Back on the shelf!',
+  need: 'I still need the shining one!',
+  ready: 'My rocket is ready! Press the big button!',
+  launch: 'LIFT OFF!',
+  legs: {
+    launch: 'Three, two, one… lift off!',
+    cruise: 'Wheee! Flying through space!',
+    arrive: 'We are here! Time to slow down.',
+    explore: 'Exploring! Beep boop!',
+    done: 'Mission over!',
+  },
+  flyingTo: { moon: 'Wheee! Off to the Moon!', mars: 'Wheee! Off to Mars!' },
+  danger: 'Uh-oh! Something is coming!',
+  dangers: {
+    'solar-storm': 'A storm from the Sun is coming!',
+    'cme-shock': 'A big puff from the Sun is coming!',
+    'mars-dust-storm': 'A big dust storm on Mars!',
+    debris: 'Tiny space pebbles ahead!',
+    'reaction-wheel': 'One of my wheels is wobbly!',
+    'memory-corruption': 'My computer feels dizzy!',
+    'insertion-anomaly': 'My brakes are acting funny!',
+  } as Record<string, string>,
+  careful: 'BE CAREFUL',
+  brave: 'KEEP GOING',
+  answered: 'Okay! I will do that.',
+  photos: 'What should I take pictures of? Tap up to three.',
+  snap: 'TAKE PICTURES!',
+  cheers: ['Super!', 'Great!', 'Wow!', 'Well done!'],
+  good: 'We did it! Thank you for helping me!',
+  lost: 'Oh no, I got lost in space. But I learned a lot! Shall we try again?',
+  stars: 'Stars for this mission',
+  myPhotos: 'MY PICTURES',
+  nextTime: 'Next time, let’s take this too:',
+  photo: 'A REAL NASA PHOTO',
+  facts: 'TRUE SPACE FACTS',
+  again: 'FLY AGAIN',
+  home: 'HOME',
+  rocket: 'Your rocket',
+  progress: 'How far we are',
+};
+/** SPACE KIDS' true facts (engine kidsTrip): how far, how long a radio hello takes, a real NASA robot's trip. */
+export const kidsFar = live('kidsFar', (dest: 'moon' | 'mars', dist: string) => (dest === 'moon' ? `The Moon is ${dist} from Earth.` : `Today, Mars is ${dist} from Earth.`));
+export const kidsHello = live('kidsHello', (time: string) => `A radio hello takes ${time} to get there!`);
+export const kidsMission = live('kidsMission', (name: string, days: string) => `The real NASA robot ${name} took ${days} to fly there.`);
+
+/** The mission briefing's frame (its words per level are BRIEFING). */
+/** What each level teaches and its line on the mission map. */
+export const LEVEL_WORDS = {
+  /** Each level's title (levels.ts reads it, so it follows the language). */
+  title: {
+    'moon-1': 'First Light',
+    'moon-2': 'Heavy Lifting',
+    'moon-3': 'Full Build',
+    mars: 'Red Planet',
+    venus: 'Cloud Diver',
+    bennu: 'Pebble Catcher',
+    jupiter: 'Giant Leap',
+  } as Record<string, string>,
+  teaches: {
+    'moon-1': 'Power',
+    'moon-2': 'Fuel & weight',
+    'moon-3': 'Science & radio',
+    mars: 'Light delay',
+    venus: 'Budget',
+    bennu: 'Rendezvous & return',
+    jupiter: 'Rocket limits',
+  } as Record<string, string>,
+  blurb: {
+    'moon-1': 'Pick solar wings that keep your craft charged.',
+    'moon-2': 'Every kilogram of fuel must be lifted too.',
+    'moon-3': 'Build the whole craft yourself.',
+    mars: 'Too far to steer live: give your craft orders.',
+    venus: 'Big radar, small wallet. Watch the budget bar.',
+    bennu: 'Meet an asteroid and bring a sample home.',
+    jupiter: 'Can any rocket reach Jupiter straight from Earth?',
+  } as Record<string, string>,
+};
+
+/** The mission map (screens/LevelMap.tsx). */
+export const LEVEL_MAP_WORDS = {
+  kicker: 'Mission map',
+  title: 'Where will you fly next?',
+  helper: 'Each mission teaches one new idea. Earn a star to open the next one.',
+  total: 'Stars earned',
+  dest: (name: string) => name.replace(/ \(.*\)$/, ''),
+  node: (title: string, dest: string, teaches: string, open: boolean) => `${title}: ${dest}, learn ${teaches}${open ? '' : ' (locked)'}`,
+  learn: (teaches: string) => `Learn: ${teaches}`,
+  stars: (n: string, max: string) => `${n} of ${max} stars`,
+  rescue: 'Rescue History',
+  rescueSub: 'Find the bug in a real lost mission, before it launches.',
+};
+
+export const BRIEF_WORDS = {
+  label: 'Mission briefing',
+  daily: 'Daily mission',
+  free: 'Free build',
+  kicker: (dest: string) => `MISSION BRIEFING · ${dest.toUpperCase()}`,
+  learn: (concept: string) => `YOU WILL LEARN: ${concept.toUpperCase()}`,
+  job: 'YOUR JOB',
+  tip: 'TIP:',
+  stars: 'HOW TO EARN STARS',
+  steps: 'THE STEPS',
+};
+
+export const MARS_NOW = {
+  title: 'MARS RIGHT NOW',
+  away: 'away',
+  takes: 'A message takes',
+  oneWay: 'one way',
+  next: 'Next solar conjunction',
+  in: 'in',
+  now: 'SOLAR CONJUNCTION NOW: the Sun is between Earth and Mars. Missions pause their orders.',
+  until: 'until',
+};
+
+/** The Pack launch checklist, in order. */
+export const LAUNCH_CHECKS = {
+  objective: 'PICK AN OBJECTIVE',
+  packed: 'PACK PARTS THAT FIT',
+  day: 'PICK A GREEN LAUNCH DAY',
+  arm: 'FLIP THE ARM SWITCH',
+  go: 'PRESS LAUNCH',
+} as const;
+
+export const NAV = {
+  back: '◂ BACK',
+  backLabel: 'Back',
+  home: 'HOME',
+  info: 'MISSION INFO',
+  help: 'HOW TO FLY',
+  start: 'GOT IT ▸',
+  next: 'NEXT ▸',
+  prev: '◂ PREV',
+  finish: 'FINISH MISSION ▸▸',
+  skip: 'SKIP',
+};
+
+export const FINISH_CONFIRM = {
+  title: 'FINISH THE MISSION?',
+  body: 'The robot flies the rest on its own. It answers any danger with its built-in plan, then you see your report.',
+  yes: 'FINISH MISSION ▸▸',
+  no: 'KEEP FLYING',
+};
+
+export const LEAVE_CONFIRM = {
+  title: 'LEAVE THIS FLIGHT?',
+  body: 'This flight ends and you go back to the last screen. You can launch again from there.',
+  leave: '◂ LEAVE FLIGHT',
+  finish: 'FINISH AND SEE REPORT ▸▸',
+  stay: 'KEEP FLYING',
+};
+
+export const FLY_WORDS = {
+  goal: 'GOAL: KEEP THE ROBOT ALIVE UNTIL THE MISSION ENDS',
+  /** A time on a card or a strip: "30 HOURS" (format.ts durationWords). */
+  duration: (s: number) => f.durationWords(s),
+  years: (n: number) => `${f.num(n)} ${n === 1 ? 'YEAR' : 'YEARS'}`,
+  day: (n: string) => `DAY ${n}`,
+  dayLabel: (n: string) => `Day ${n}`,
+  dayK: 'DAY',
+  inDays: (n: number) => `IN ${f.num(n)} ${n === 1 ? 'DAY' : 'DAYS'}`,
+  /** A danger card: the engine's hazard title and question (English data). */
+  hazard: (type: string, title: string) => title.toUpperCase(),
+  prompt: (type: string, prompt: string) => prompt,
+  dangerCard: 'DANGER CARD',
+  arrives: 'DANGER ARRIVES',
+  arrivesHow: (severity: string) => `DANGER ARRIVES · ${severity}`,
+  takes: 'YOUR ORDER TAKES',
+  takesShort: 'ORDER TAKES',
+  history: 'REAL HISTORY',
+  toVerify: 'TO VERIFY',
+  risk: (n: string) => `⚠ +${n} risk`,
+  ifFails: (effect: string) => `If it fails, ${effect}`,
+  sunUntil: (day: string) => `SUN IN THE WAY: NO ORDERS UNTIL DAY ${day}`,
+  sunNow: 'SUN IN THE WAY: NO ORDERS NOW',
+  standingOrder: 'STANDING ORDER',
+  robotDefault: 'THE ROBOT’S DEFAULT',
+  letRobot: 'LET THE ROBOT DECIDE',
+  letRobotRuns: 'LET THE ROBOT DECIDE · TIME RUNS ON',
+  swipe: ['◂ SWIPE LEFT / ← KEY', '→ KEY / SWIPE RIGHT ▸', '▾ ↓ KEY'],
+  swipePhone: ['◂ SWIPE LEFT', 'SWIPE RIGHT ▸', 'TAP'],
+  /** The eclipse planning card. */
+  planAhead: 'PLAN AHEAD',
+  eclipse: 'ECLIPSE SEASON',
+  eclipseLine: (dest: string, dark: string) => `${dest} will block the Sun for up to ${dark} every orbit. No sun, no power.`,
+  darkStarts: 'DARK SEASON STARTS',
+  theRule: 'THE RULE',
+  dodRule: (pct: string) => `Batteries are only drained to ${pct} in the dark, so they last for thousands of orbits.`,
+  inTheDark: (on: string, total: string) => `${on}/${total} IN THE DARK`,
+  cold: 'COLD',
+  coldTitle: 'Cold parts wear out faster',
+  useBattery: 'USE BATTERY',
+  savePower: 'SAVE POWER',
+  keepWarm: 'Keep everything warm.',
+  shiver: 'Turn the heaters down. Shiver.',
+  /** The CRT log line. */
+  dangerAhead: (title: string) => `DANGER AHEAD: ${title}.`,
+  planAheadLine: (title: string) => `PLAN AHEAD: ${title}.`,
+  orderSent: (label: string) => `ORDER SENT: ${label}.`,
+  orderReceived: 'ORDER RECEIVED BY THE ROBOT.',
+  signalReceived: 'SIGNAL RECEIVED.',
+  orderArrived: (label: string) => `ORDER ARRIVED: ${label}.`,
+  waitingToSee: 'WAITING TO SEE WHAT HAPPENS.',
+  /** The order crossing space, and the wait for what happens. */
+  onItsWay: (label: string) => `ORDER “${label}” IS ON ITS WAY`,
+  teamWriting: 'THE TEAM IS WRITING THE ORDER',
+  reaches: 'SIGNAL REACHES ROBOT IN',
+  reachesShort: 'ORDER REACHES ROBOT IN',
+  thenCrosses: 'THEN IT CROSSES SPACE AT LIGHT SPEED',
+  justWait: 'NOTHING YOU CAN DO NOW BUT WAIT',
+  carriedOut: (label: string) => `ORDER “${label}” CARRIED OUT`,
+  strikesIn: (title: string) => `${title} STRIKES IN`,
+  danger: 'DANGER',
+  holdOn: 'THE ROBOT IS READY. HOLD ON.',
+  incoming: 'Incoming message',
+  incomingFrom: (mission: string) => `INCOMING · FROM ${mission.toUpperCase()}`,
+  continue: 'CONTINUE ▸',
+  /** The action bar and the clock. */
+  resources: 'Robot resources',
+  tile: (name: string, on: string, total: string) => `${name}: ${on} of ${total}`,
+  speeds: 'Time speed',
+  pause: 'Pause',
+  speed: (x: string) => `${x} speed`,
+  powerPlan: 'POWER PLAN',
+  callHome: 'CALL HOME',
+  orders: 'ORDERS',
+  ordersLabel: 'Command queue',
+  equations: 'EQUATIONS',
+  nextEvent: 'NEXT EVENT ▸',
+  nextEventLabel: 'Next event',
+  progress: 'Mission progress',
+  /** The end of the flight. */
+  over: 'Mission over',
+  lost: 'CONTACT LOST',
+  notLaunched: 'NOT LAUNCHED',
+  complete: 'PRIME MISSION COMPLETE',
+  silent: 'THE ROBOT WENT SILENT.',
+  printing: 'THE TELETYPE IS PRINTING YOUR REPORT.',
+  seeReport: 'SEE MISSION REPORT ▸',
+  /** The map and the ribbon of what is coming. */
+  map: 'Mission map',
+  yourPath: 'YOUR PATH',
+  realPath: 'REAL NASA PATH',
+  ghost: (label: string) => `${label}: real path, turned to start beside you`,
+  now: 'NOW',
+  tickEng: (day: string) => `DAY ${day}`,
+  whenEng: (day: string, t: string) => `DAY ${day} · T−${t} d`,
+  comingUp: 'COMING UP',
+  comingUpSub: 'COMING UP · YOU CAN SEE THESE ONES COMING',
+  nextMonths: (n: string) => `NEXT ${n} MONTHS`,
+};
+
+/** The footer line under the progress bar. */
+export const endsInWords = live('endsInWords', (daysLeft: number) => (daysLeft <= 0 ? 'MISSION OVER' : `MISSION ENDS IN ${f.num(daysLeft)} ${daysLeft === 1 ? 'DAY' : 'DAYS'}`));
+
+/** The nudge when the clock is paused and nothing else is on screen. */
+export const playNudge = live('playNudge', (speedLabel: string) => `▶ PRESS ${speedLabel} TO LET TIME RUN`);
+
+/** Labels on the CRT map. */
+export const MAP_WORDS = {
+  earth: 'EARTH',
+  planet: (name: string) => name.toUpperCase(),
+  sun: 'SUN',
+  storm: 'SOLAR STORM',
+  order: 'YOUR ORDER',
+  reply: 'ITS REPLY',
+  you: 'YOU',
+};
+
+/** The log line while a solar storm crosses space toward the robot, and while it hits. */
+export const stormLine = live('stormLine', (phase: 'coming' | 'hitting', name: string, hitsIn: string) =>
+  phase === 'coming' ? `THE SUN ERUPTED. A SOLAR STORM HITS ${name} IN ${hitsIn}.` : `SOLAR STORM ON ${name}. PARTICLES EVERYWHERE.`);
+
+// ---------------------------------------------------------------------------
+// The robot's voice. It reports in the first person; every line reached Earth one light time after it was sent.
+
+/** Names the 🎲 button cycles through on Pack (the first is the default). */
+export const ROBOT_NAMES = ['PIP', 'NOVA', 'ZIPPY', 'BOLT', 'COMET', 'SPARKY', 'ORBIT', 'BEEP', 'ASTRO', 'DOT', 'RUSTY', 'TWINKLE'];
+/** Longest robot name (letters): the twelve cells of the name screen, and still short enough for the map. */
+export const ROBOT_NAME_MAX = 12;
+
+/**
+ * A typed name made safe for the map: capitals, letters, digits, spaces and dashes, no leading space, at most
+ * ROBOT_NAME_MAX. Saved names are cleaned again when read back (saves.ts), so storage can't smuggle anything in.
+ */
+export const cleanRobotName = live('cleanRobotName', (raw: string) =>
+  raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9 -]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^ +/, '')
+    .slice(0, ROBOT_NAME_MAX));
+
+/** The name to show: the player's, or the default when the field was left empty. */
+export const robotNameOr = live('robotNameOr', (name: string | undefined) => (name && name.trim() ? name.trim() : ROBOT_NAMES[0]!));
+
+/** The next suggestion after the current name. */
+export const nextRobotName = live('nextRobotName', (name: string) => ROBOT_NAMES[(ROBOT_NAMES.indexOf(name) + 1) % ROBOT_NAMES.length]!);
+
+export const ROBOT_WORDS = {
+  nameLabel: 'YOUR ROBOT’S NAME',
+  suggest: 'Suggest a name',
+  took: (dest: string, delay: string) => `FROM ${dest} · TOOK ${delay} TO REACH YOU`,
+  lastMessage: (name: string) => `LAST MESSAGE FROM ${name}`,
+};
+
+/** NAME YOUR ROBOT (design screen 00), before the first mission. */
+export const NAME_WORDS = {
+  kicker: 'PAD 39A · PRE-LAUNCH',
+  intro1: '> A NEW ROBOT IS WAITING ON THE PAD.',
+  intro2: '> GIVE IT A NAME.',
+  count: (n: string, max: string) => `NAME · ${n} / ${max}`,
+  input: 'Robot name',
+  /** The design's three suggestions. */
+  suggestions: ['VOYA', 'TALLY', 'KESTREL'],
+  suggestion: (n: string) => `SUGGESTION ${n}`,
+  launch: 'LAUNCH INTO TODAY’S SKY',
+  firstHead: (name: string, day: string) => `${name} · DAY ${day} · SENT JUST NOW`,
+  noDelay: 'THE LAST TIME THERE IS NO DELAY',
+  firstWords: 'SYSTEMS ON. FUEL FULL. READY WHEN YOU ARE.',
+  load: (name: string) => `LOAD ${name}`,
+  loadSub: 'Next: the packing bay',
+  skip: (name: string) => `SKIP · CALL IT ${name}`,
+  sky: 'TODAY’S SKY',
+  skyLine: (date: string, minutes: string) => `TODAY · ${date} · MARS IS ${minutes} LIGHT-MINUTES AWAY`,
+  skyPhone: (minutes: string) => `MARS IS ${minutes} LIGHT-MINUTES AWAY`,
+  skyEng: (au: string, mkm: string, t: string) => `${au} · ${mkm} · t = d / c = ${t}`,
+};
+
+/**
+ * Fill a word template: each {slot} becomes its value. The robot's lines are templates, not sentences glued from
+ * pieces, so a template can move the slots wherever its sentence needs them.
+ */
+export const fill = live('fill', (template: string, slots: Record<string, string>) => template.replace(/\{(\w+)\}/g, (all, k: string) => slots[k] ?? all));
+
+/**
+ * The robot's voice: terse uppercase telemetry, in the first person. Slots: {dest} {name} {option} {hazard}
+ * {days} {dist} {fuel} {data} {dv} {burned} {dark} {lost} {period} {waited} {pct} {years}. Each kind has one or more variants; the
+ * message's seq picks one, so a repeated kind does not repeat itself word for word.
+ */
+export const VOICE: Record<Exclude<VoiceKind, 'hit' | 'status'>, string[]> = {
+  launch: ['LIFTOFF. SYSTEMS ON. NEXT STOP: {dest}.'],
+  'launch-failed': ['THE ROCKET FAILED. I NEVER LEFT THE PAD.'],
+  halfway: ['HALFWAY TO {dest}. EARTH IS A BLUE DOT BEHIND ME.'],
+  arrived: ['ARRIVED AT {dest}. ENGINE FIRED. IT CAUGHT ME.'],
+  science: ['INSTRUMENTS ON. {dest} BELOW. MAPPING.'],
+  'heading-home': ['SAMPLE STOWED. TURNING FOR HOME.'],
+  'bonus-time': ['EXTENSION BEGINS. STILL HERE. STILL WORKING.'],
+  dark: ['ECLIPSE SEASON. UP TO {dark} DARK EACH ORBIT. RUNNING ON BATTERY.', 'SHADOW SEASON AGAIN. {dark} DARK EACH ORBIT. HEATERS DOWN A LITTLE.', 'DARK AGAIN. I KNOW THE DRILL.'],
+  conjunction: ['THE SUN IS BETWEEN US. NO ORDERS FOR A WHILE. FLYING MYSELF.'],
+  'conjunction-end': ['THE SUN HAS MOVED ASIDE. I CAN HEAR YOU AGAIN.'],
+  saved: ['{hazard} PASSED. ALL SYSTEMS SAFE.', 'THAT WORKED. NO DAMAGE.', 'ALL GOOD UP HERE.'],
+  hurt: ['{hazard}: SOMETHING BROKE. STILL FLYING.', 'DAMAGE TAKEN. CARRYING ON AS BEST I CAN.'],
+  'instrument-lost': ['LOST AN INSTRUMENT. WORKING WITH THE REST.'],
+  'safe-mode': ['SAFE MODE. EVERYTHING NON-ESSENTIAL OFF. WAITING FOR ORDERS.'],
+  brownout: ['BATTERY LOW. SWITCHING THINGS OFF TO STAY ALIVE.'],
+  'wheel-spare': ['A WHEEL FAILED. THE SPARE TOOK OVER. STILL POINTING TRUE.'],
+  'out-of-fuel': ['TANK EMPTY. I CAN NO LONGER STEER.'],
+  'prime-complete': ['PRIMARY MISSION COMPLETE. ALL MY SCIENCE IS ON ITS WAY.'],
+  'last-words': ['MY BATTERY IS LOW AND IT’S GETTING DARK.'],
+  'order-received': ['ORDER RECEIVED. {option}. DONE.'],
+  'acted-alone': ['NO ORDER CAME IN TIME. I CHOSE {option}.'],
+  'order-too-late': ['YOUR ORDER CAME TOO LATE. I HAD ALREADY ACTED.'],
+  'science-milestone': ['{pct} OF THE SCIENCE GOAL SENT HOME.'],
+  extension: ['EXTENSION ORDER RECEIVED. {years} MORE. STILL HERE.'],
+  'signing-off': ['{name} SIGNING OFF. THANK YOU, EARTH.'],
+  targets: ['{name} IS IN {dest} ORBIT. WHAT SHOULD IT LOOK AT?'],
+  observing: ['ORDER RECEIVED. {target} IMAGE QUEUED.'],
+  'observe-refused': ['I CANNOT TAKE {target} NOW.'],
+  'image-sent': ['PICTURE OF {target} SENT HOME. {comment}'],
+  'far-side': ['BEHIND THE MOON {lost} OF EVERY {period}. NO SIGNAL THERE. I FLY MYSELF.'],
+  'link-back': ['LINK BACK. YOUR ORDER WAITED {waited} BEHIND THE MOON.'],
+  'trim-burn': ['TRIM BURN: {dv}. THE MOON’S LUMPY GRAVITY PULLS ME DOWN. HOLDING MY ORBIT.'],
+};
+
+/** The science targets in the robot's words (spec: UI rule 39): the name it uses and what it says when the picture goes home. */
+export const TARGET_WORDS: Record<string, { name: string; comment: string }> = {
+  'olympus-mons': { name: 'OLYMPUS MONS', comment: 'IT WAS WIDER THAN MY WHOLE VIEW.' },
+  'valles-marineris': { name: 'VALLES MARINERIS', comment: 'A CRACK ACROSS THE WHOLE PLANET. I FOLLOWED IT ALL PASS.' },
+  'north-polar-cap': { name: 'NORTH POLAR CAP', comment: 'WHITE SPIRALS. THE ICE IS WRITING SOMETHING DOWN.' },
+  phobos: { name: 'PHOBOS', comment: 'CLOSE ENOUGH TO SEE THE GROOVES. IT IS FALLING TOWARD MARS. SLOWLY.' },
+  deimos: { name: 'DEIMOS', comment: 'SMALL. QUIET. SMOOTH, LIKE SAND POURED OVER IT.' },
+  limb: { name: 'THIN AIR AT THE LIMB', comment: 'THE SKY HERE IS ONE THIN LINE. I FLEW LOW TO SEE IT.' },
+  'apollo-11': { name: 'THE APOLLO 11 SITE', comment: 'THE LANDER IS STILL THERE. SO ARE THEIR FOOTPRINTS.' },
+  tycho: { name: 'TYCHO', comment: 'SUNRISE ON THE CENTRAL PEAK. ITS SHADOW REACHED ACROSS THE FLOOR.' },
+  shackleton: { name: 'SHACKLETON', comment: 'THE RIM IS LIT. THE FLOOR HAS NEVER SEEN THE SUN.' },
+  tsiolkovskiy: { name: 'TSIOLKOVSKIY', comment: 'DARK LAVA ON THE FAR SIDE. NO ONE ON EARTH HAS EVER SEEN THIS WITH THEIR OWN EYES.' },
+};
+
+export const targetName = live('targetName', (id: string) => TARGET_WORDS[id]?.name ?? id.toUpperCase());
+
+/** Lines with a different shape for some values: a burn on arrival, plans and standing orders, a full goal. */
+export const VOICE_ALT = {
+  arrivedBurn: 'ENGINE FIRED: {dv} OFF MY SPEED, {burned} OF FUEL. {dest} CAUGHT ME.',
+  plan: 'ORDER RECEIVED. NEW POWER PLAN LOADED.',
+  standing: 'ORDER RECEIVED. NEW STANDING ORDERS STORED.',
+  standingChoice: 'NO NEW ORDER. FOLLOWING YOUR STANDING ORDER: {option}.',
+  goalMet: 'SCIENCE GOAL MET. EVERYTHING I CAME FOR IS SENT HOME.',
+  hitUnknown: 'TROUBLE UP HERE. SOMETHING JUST WENT WRONG.',
+  observeDip: 'ORDER RECEIVED. DIPPING LOW FOR {target}. IMAGE QUEUED. BACK UP IN {days}.',
+  observeFarSide: 'ORDER RECEIVED. {target} IS ON THE FAR SIDE. I WILL SHOOT IT ALONE, OUT OF YOUR SIGHT. IMAGE QUEUED.',
+  refusedFuel: 'NOT ENOUGH FUEL FOR {target}. I KEEP WHAT I NEED TO STAY UP.',
+  refusedUnreachable: 'I CANNOT SEE {target} CLEARLY FROM THIS ORBIT.',
+  refusedAlready: '{target} IS ALREADY ON MY LIST.',
+  refusedNotInOrbit: 'NOT IN ORBIT YET. ASK ME AGAIN AT {dest}.',
+};
+
+/** Routine status (VOICE_RULES.statusEvery_days): on the way, at the destination, and on the way home. */
+export const STATUS_VOICE: Record<'cruise' | 'orbit' | 'home', string[]> = {
+  cruise: ['CRUISE NOMINAL. {days} DAYS TO {dest}. {fuel} OF FUEL LEFT.', 'ALL QUIET. {dist} FROM EARTH. HOLDING COURSE.', 'STAR TRACKER LOCKED. {days} DAYS TO {dest}.'],
+  orbit: ['ORBIT NOMINAL. {data} SENT HOME SO FAR.', 'ALL QUIET. MAPPING. {fuel} OF FUEL LEFT.', 'HEATERS CYCLING. {dist} FROM EARTH. HOLDING.'],
+  home: ['HEADING HOME. ALL QUIET. {dist} FROM EARTH.'],
+};
+
+const HIT_VOICE: Record<string, string[]> = {
+  'solar-storm': ['STORM HERE. PARTICLES HITTING MY PANELS.', 'ANOTHER SOLAR STORM. I CAN FEEL IT IN MY CIRCUITS.'],
+  'cme-shock': ['THE CME HIT. AURORA BELOW ME.', 'SHOCK WAVE FROM THE SUN. EVERYTHING IS RATTLING.'],
+  'mars-dust-storm': ['DUST STORM BELOW. THE AIR IS PUFFING UP TOWARD MY ORBIT.'],
+  debris: ['SOMETHING TINY JUST WENT PAST ME. FAST.'],
+  'reaction-wheel': ['ONE OF MY WHEELS IS GRINDING.'],
+  'memory-corruption': ['MEMORY ERRORS. RUNNING CHECKS.'],
+  'radiation-damage': ['HEAVY RADIATION AROUND {dest}. CIRCUITS TINGLING.'],
+};
+
+/** What a line needs besides the message: names, and how to say an option and a hazard. */
+export interface VoiceContext {
+  dest: string;
+  name: string;
+  option?: (hazardType: string, optionId: string) => string;
+  hazard?: (hazardType: string) => string;
+}
+
+const years = (n: number) => `${f.num(n)} ${n === 1 ? 'YEAR' : 'YEARS'}`;
+
+/** What the robot says, in its own words (uppercase telemetry). Every number is the message's, only formatted. */
+function robotSaysEn(m: RobotMessage, ctx: VoiceContext): string {
+  const v = m.values;
+  const pick = (lines: string[]) => lines[m.seq % lines.length]!;
+  const type = v.hazardType ?? '';
+  const slots: Record<string, string> = {
+    dest: ctx.dest.toUpperCase(),
+    name: ctx.name.toUpperCase(),
+    option: v.optionId ? (ctx.option ? ctx.option(type, v.optionId) : v.optionId.toUpperCase()) : '',
+    hazard: type ? (ctx.hazard ? ctx.hazard(type) : type).toUpperCase() : '',
+    ...(v.daysToArrival !== undefined ? { days: f.num(v.daysToArrival) } : {}),
+    ...(v.earthDistance_m !== undefined ? { dist: f.millionKm(v.earthDistance_m).toUpperCase() } : {}),
+    ...(v.propellantLeft_kg !== undefined ? { fuel: f.kg(v.propellantLeft_kg).toUpperCase() } : {}),
+    ...(v.downlinked_bits !== undefined ? { data: f.bits(v.downlinked_bits).toUpperCase() } : {}),
+    ...(v.dv_ms !== undefined ? { dv: f.speed(v.dv_ms).toUpperCase() } : {}),
+    ...(v.propellant_kg !== undefined ? { burned: f.kg(v.propellant_kg).toUpperCase() } : {}),
+    ...(v.longestEclipse_s !== undefined ? { dark: f.minutes(v.longestEclipse_s).toUpperCase() } : {}),
+    ...(v.lost_s !== undefined ? { lost: f.minutes(v.lost_s).toUpperCase() } : {}),
+    ...(v.period_s !== undefined ? { period: f.minutes(v.period_s).toUpperCase() } : {}),
+    ...(v.waited_s !== undefined ? { waited: f.minutes(v.waited_s).toUpperCase() } : {}),
+    ...(v.fraction !== undefined ? { pct: f.pct(v.fraction, 0) } : {}),
+    ...(v.years !== undefined ? { years: years(v.years) } : {}),
+    ...(v.targetId !== undefined ? { target: targetName(v.targetId), comment: TARGET_WORDS[v.targetId]?.comment ?? '' } : {}),
+    ...(v.days !== undefined ? { days: `${f.num(v.days)} ${v.days === 1 ? 'DAY' : 'DAYS'}` } : {}),
+  };
+  let t: string;
+  if (m.kind === 'hit') t = pick(HIT_VOICE[type] ?? [VOICE_ALT.hitUnknown]);
+  else if (m.kind === 'status') {
+    const where = v.phase === 'cruise' || v.phase === 'launch' ? 'cruise' : v.phase === 'return' ? 'home' : 'orbit';
+    t = pick(STATUS_VOICE[where]);
+  } else if (m.kind === 'arrived' && v.dv_ms !== undefined) t = VOICE_ALT.arrivedBurn;
+  else if (m.kind === 'order-received' && v.commandKind === 'power-plan') t = VOICE_ALT.plan;
+  else if (m.kind === 'order-received' && v.commandKind === 'standing-orders') t = VOICE_ALT.standing;
+  else if (m.kind === 'acted-alone' && v.by === 'standing-order') t = VOICE_ALT.standingChoice;
+  else if (m.kind === 'science-milestone' && (v.fraction ?? 0) >= 1) t = VOICE_ALT.goalMet;
+  else if (m.kind === 'observing' && (v.days ?? 1) > 1) t = VOICE_ALT.observeDip;
+  else if (m.kind === 'observing' && v.farSide) t = VOICE_ALT.observeFarSide;
+  else if (m.kind === 'observe-refused' && v.reason === 'fuel') t = VOICE_ALT.refusedFuel;
+  else if (m.kind === 'observe-refused' && v.reason === 'unreachable') t = VOICE_ALT.refusedUnreachable;
+  else if (m.kind === 'observe-refused' && v.reason === 'already-ordered') t = VOICE_ALT.refusedAlready;
+  else if (m.kind === 'observe-refused' && v.reason === 'not-in-orbit') t = VOICE_ALT.refusedNotInOrbit;
+  else t = pick(VOICE[m.kind]);
+  return fill(t, slots);
+}
+export const robotSays = live('robotSays', robotSaysEn);
+
+/** The TRANSMISSIONS teletype (Fly & Survive), the robot's reply to an order, and the reply's trip home. */
+export const TX_WORDS = {
+  kicker: (name: string) => `TELETYPE 02 · ${name} ⇄ EARTH`,
+  title: 'TRANSMISSIONS',
+  keyRobot: (name: string) => `BLACK · ${name}`,
+  keyYou: 'RED · YOU',
+  fromEarth: (name: string) => `EARTH ▸ ${name}`,
+  day: (day: string) => `DAY ${day}`,
+  took: (delay: string) => `TOOK ${delay}`,
+  /** On the pad there is no light time yet. */
+  noDelay: 'NO DELAY · ON THE PAD',
+  reply: 'REPLY',
+  queued: (t: string) => `TEAM WRITING · LEAVES IN ${t}`,
+  inFlight: (t: string) => `IN FLIGHT · ${t}`,
+  replyInbound: 'DELIVERED · REPLY INBOUND',
+  delivered: 'DELIVERED',
+  tooLate: 'TOO LATE',
+  order: (what: string) => `ORDER: ${what}.`,
+  plan: 'NEW POWER PLAN',
+  standing: 'NEW STANDING ORDERS',
+  observe: (target: string) => `OBSERVE ${target}`,
+  extend: (years: string) => `KEEP FLYING ${years}`,
+  /** Footer: "Everything PIP says is 12 MINUTES old by the time it prints here." */
+  footBefore: (name: string) => `Everything ${name} says is `,
+  footAge: (age: string) => `${age} old`,
+  footAfter: ' by the time it prints here.',
+  empty: 'NOTHING YET. THE ROBOT IS STILL ON THE PAD.',
+  log: '▾ LOG',
+  close: '▴ CLOSE',
+  logLabel: 'Transmissions log',
+  replyFrom: (name: string, delay: string) => `REPLY FROM ${name} · TOOK ${delay}`,
+  roundTrip: (t: string) => `YOUR ORDER WENT THERE AND BACK: ${t}`,
+  roundTripEng: (t: string, name: string) => `ROUND TRIP 2t = ${t} · EARTH → ${name} → EARTH`,
+  heard: (name: string) => `${name} HEARD YOU. REPLY ON ITS WAY`,
+  replyReaches: 'REPLY REACHES EARTH IN',
+  alreadyActed: 'IT HAS ALREADY ACTED. YOU JUST CAN’T SEE IT YET',
+};
+
+// ---------------------------------------------------------------------------
+// Big moments
+
+/** The language switch in every top bar (i18n.ts). */
+export const LANG_WORDS = { label: 'Language', en: 'EN', fr: 'FR' };
+
+/** The ABOUT key on Home and its panel (the team, the repository and the project live in about.ts). */
+export const ABOUT_WORDS = {
+  menu: 'ABOUT',
+  title: 'ABOUT THIS PROJECT',
+  description:
+    'Our version of Signal Delay: a space mission game where you keep a robot alive millions of kilometres away, and every order arrives minutes late. We simplified the look, added an English / French switch and focused the game on its missions.',
+  team: 'THE TEAM',
+  repo: 'SOURCE CODE',
+  repoLink: 'View the repository on GitHub',
+  close: 'CLOSE',
+};
+
+/**
+ * The cold open (spec UI rule 47): Mars Climate Orbiter, Sept. 23, 1999, on the first launch. Every fact comes from
+ * the MCO rescue case (engine coldOpenFacts): the date, the craft, the insertion burn, the signal due from behind
+ * Mars, the loss and the units.
+ */
+export const COLD_OPEN = {
+  label: 'Mars Climate Orbiter, 1999: the signal that never came back',
+  /** The headline date: "SEPTEMBER 23, 1999". */
+  date: (iso: string) => f.longDate(iso),
+  burn: (date: string, craft: string) => `${date} · ${craft.toUpperCase()} · ORBIT INSERTION BURN`,
+  expected: 'SIGNAL EXPECTED WHEN IT COMES OUT FROM BEHIND MARS',
+  waiting: 'WAITING FOR SIGNAL',
+  lost: '— NO SIGNAL —',
+  units: 'ONE TEAM USED POUNDS. THE OTHER, NEWTONS.',
+  moral: 'EVERY ORDER YOU SEND ARRIVES LATE. MAKE IT COUNT.',
+  source: (citation: string) => `SOURCE · ${citation.toUpperCase()}`,
+  skip: 'SKIP ▸',
+};
+
+export const MOMENT_WORDS = {
+  countdownK: 'LAUNCH IN',
+  count: (n: number) => `T−${f.num(n)}`,
+  liftoff: 'LIFTOFF!',
+  skip: 'SKIP ▸',
+  arrived: (dest: string, asteroid: boolean) => (asteroid ? `ARRIVED AT ${dest}!` : `IN ORBIT AT ${dest}!`),
+  arrivedSub: (name: string) => `${name} FIRED ITS ENGINE AND WAS CAUGHT BY GRAVITY.`,
+  arrivedSubBennu: (name: string) => `${name} SLOWED DOWN TO FLY BESIDE THE ASTEROID.`,
+  storm: 'SOLAR STORM HIT!',
+  stormSub: (name: string) => `PARTICLES FROM THE SUN ARE HITTING ${name}.`,
+  launchFailed: 'LAUNCH FAILED',
+};
+
+// ---------------------------------------------------------------------------
+// Rescue History (screens/Rescue.tsx). Its clues and the failure report's findings are cited texts from the data.
+
+export const RESCUE_WORDS = {
+  kicker: '🛟 Rescue History',
+  kickerYear: (year: string) => `🛟 Rescue History · ${year}`,
+  title: 'Save a mission that was lost',
+  helper: 'Real spacecraft were lost to small mistakes. Read the file, find the bug, and fix it before launch.',
+  lostAtMars: 'Lost on arrival at Mars',
+  stars: (n: string) => `${n} stars`,
+  /** What each case still to come is, in the order of Rescue.tsx COMING (names stay English). */
+  coming: ['capsule, 2004', 'lander, 1999'],
+  comingSoon: 'Coming soon',
+  back: '◂ Back',
+  caseHelper: 'It was lost on arrival at Mars. Find the bug before it launches.',
+  whatHappened: 'What happened',
+  file: 'Mission file',
+  fact: {
+    launch: 'Launch',
+    rocket: 'Rocket',
+    launchMass: 'Launch mass',
+    fuel: 'Fuel',
+    power: 'Power at Mars',
+    engine: 'Main engine',
+    arrival: 'Arrival',
+    delay: 'Signal delay at Mars',
+    lowest: 'Planned lowest point',
+  },
+  clues: 'Clues',
+  which: 'Which one is the bug?',
+  fromReport: 'From the failure report',
+  accuse: 'This is the bug!',
+  saved: '🎉 Bug found. Mission saved!',
+  starsOf: (n: string, max: string) => `${n} of ${max} stars`,
+  /** "Every push was [4.45×] bigger than the navigators thought ⓘ. Over the trip, the craft drifted [169 km] lower than planned." */
+  factor: { before: 'Every push was ', mid: ' bigger than the navigators thought ', drift: '. Over the trip, the craft drifted ', after: ' lower than planned.' },
+  factorTitle: 'Pound-force to newtons',
+  chart: (plan: string, safe: string, actual: string) => `Planned ${plan}, survivable ${safe}, actual ${actual}`,
+  plan: (km: string) => `Plan · ${km}`,
+  safe: (km: string) => `Lowest safe · ${km}`,
+  happened: (km: string) => `What happened · ${km}`,
+  /** "Lowest point: plan ⓘ · safe limit ⓘ · estimate after the loss ⓘ" */
+  note: { plan: 'Lowest point: plan', safe: ' · safe limit', estimate: ' · estimate after the loss' },
+  noteTitle: { plan: 'Planned lowest point', safe: 'Lowest safe point', estimate: 'Estimated lowest point' },
+  backToList: 'Back to Rescue History',
+};
+
+// ---------------------------------------------------------------------------
+// ⓘ, the source of a number or a cited text (components/SourceInfo.tsx)
+
+export const SOURCE_WORDS = {
+  label: (title?: string) => (title ? `Source of ${title}` : 'Source'),
+  kicker: 'Source',
+  close: 'Close',
+  estimate: 'GAME ESTIMATE · NOT NASA DATA',
+  computed: 'COMPUTED BY THE ENGINE',
+  published: 'PUBLISHED SOURCE',
+  unit: (u: string) => `unit: ${u}`,
+  open: 'Open source ↗',
+};
+
+// ---------------------------------------------------------------------------
+// Postcards from space
+
+export const POSTCARD_WORDS = {
+  menu: 'POSTCARDS',
+  menuSub: 'Real NASA pictures your robots sent home.',
+  view: (title: string) => `Postcard: ${title}`,
+  tile: (title: string, dest: string) => `${title} (${dest})`,
+  title: 'POSTCARDS FROM SPACE',
+  sub: 'Real pictures from NASA missions. Your robot sends one home as its science reaches Earth.',
+  toast: (dest: string) => `📮 POSTCARD FROM ${dest}!`,
+  look: 'TAP TO LOOK',
+  keep: 'KEEP FLYING ▸',
+  close: 'CLOSE',
+  credit: (c: string) => `IMAGE: ${c}`,
+  report: 'POSTCARDS FROM THIS FLIGHT',
+  none: 'No postcards this time: no science reached Earth.',
+  locked: 'LOCKED',
+  /** How a locked card is earned, from its unlock share (0 = first data, 1 = the whole goal). */
+  hint: (dest: string, share: number) =>
+    share <= 0 ? `Fly to ${dest} and send home your first science.` : share >= 1 ? `Send home all the science from ${dest}.` : `Send home half the science from ${dest}.`,
+};
+
+// ---------------------------------------------------------------------------
+// Ranks and badges (engine ranks.ts)
+
+export const RANK_WORDS: Record<string, string> = {
+  cadet: 'CADET',
+  'flight-controller': 'FLIGHT CONTROLLER',
+  capcom: 'CAPCOM',
+  'flight-director': 'FLIGHT DIRECTOR',
+  'mission-legend': 'MISSION LEGEND',
+};
+
+export const CREW_WORDS = {
+  title: 'CREW FILE',
+  rank: 'YOUR RANK',
+  toNext: (n: number, next: string) => `${f.num(n)}★ TO ${next}`,
+  top: 'TOP RANK',
+  stars: (n: number, max: number) => `${f.num(n)} OF ${f.num(max)} STARS`,
+  badges: 'BADGES',
+  open: 'Open your crew file',
+  close: 'CLOSE',
+  realJob: 'THE REAL JOB',
+  promoted: 'PROMOTED!',
+  newBadge: 'NEW BADGE',
+  earned: 'EARNED',
+  locked: 'NOT YET',
+};
+
+export const BADGE_WORDS: Record<string, { name: string; how: string }> = {
+  'first-flight': { name: 'FIRST FLIGHT', how: 'Earn a star on any mission.' },
+  'storm-survivor': { name: 'STORM SURVIVOR', how: 'Fly through a solar storm without losing an instrument.' },
+  'through-the-sun': { name: 'THROUGH THE SUN', how: 'Keep flying while the Sun blocks your radio (a solar conjunction).' },
+  'night-shift': { name: 'NIGHT SHIFT', how: 'Get through a whole eclipse season with no brownout.' },
+  'bonus-time': { name: 'BONUS TIME', how: 'Ask for a mission extension at the end of a flight.' },
+  'sample-home': { name: 'SAMPLE HOME', how: 'Bring a piece of asteroid Bennu back to Earth.' },
+  shutterbug: { name: 'SHUTTERBUG', how: 'Collect all the postcards from one place.' },
+  'daily-streak': { name: 'DAILY STREAK', how: 'Play the Daily mission three days in a row.' },
+  rescuer: { name: 'RESCUER', how: 'Save a robot in Rescue History.' },
+  'big-thinker': { name: 'BIG THINKER', how: 'Find out why no rocket flies straight to Jupiter.' },
+};
+
+/** Science Targets in the CRT after arrival (spec: UI rule 39; design screen 01, SCIENCE TARGETS). */
+export const SCIENCE = {
+  title: (dest: string) => `${dest} ORBIT · SCIENCE TARGETS`,
+  titlePhone: (dest: string) => `${dest} ORBIT · PICK TARGETS`,
+  hint: 'EVERY PICTURE COSTS FUEL, BATTERY OR RISK. YOU CAN’T SEE IT ALL.',
+  hintSome: (n: string) => `${n} ORDERED · EVERY PICTURE COSTS FUEL, BATTERY OR RISK`,
+  image: 'IMAGE',
+  quality: { 3: 'SHARP', 2: 'GOOD', 1: 'FAIR' } as Record<1 | 2 | 3, string>,
+  risk: { none: 'USUAL ORBIT', low: 'DRAG LOW', medium: 'DRAG MED', high: 'DRAG HIGH' } as Record<'none' | 'low' | 'medium' | 'high', string>,
+  dust: 'DUSTY',
+  state: {
+    ordered: 'ORDER IN FLIGHT',
+    observing: 'LOOKING NOW',
+    'on-board': 'ON BOARD',
+    sent: 'ON ITS WAY',
+    home: 'HOME ✓',
+    refused: 'REFUSED',
+  } as Record<'ordered' | 'observing' | 'on-board' | 'sent' | 'home' | 'refused', string>,
+  observe: 'OBSERVE',
+  orderTakes: (target: string, time: string, name: string) => `${target} · the order takes ${time} to reach ${name}`,
+  orderTakesShort: (time: string) => `ARRIVES IN ${time.toUpperCase()}`,
+  blocked: {
+    ordered: ['Already ordered. Pick another target.', 'ALREADY ORDERED'],
+    fuel: ['Not enough fuel. The robot keeps what it needs to stay in orbit.', 'NOT ENOUGH FUEL'],
+    unreachable: ['This orbit cannot see it clearly enough.', 'CAN’T SEE IT FROM HERE'],
+    blackout: ['The Sun is in the way: no orders until it moves aside.', 'SUN IN THE WAY'],
+    'not-flying': ['The robot is not taking orders.', 'NO ORDERS NOW'],
+  } as Record<'ordered' | 'fuel' | 'unreachable' | 'blackout' | 'not-flying', [string, string]>,
+  done: 'DONE · KEEP FLYING',
+  doneShort: 'DONE',
+  skip: 'SKIP SCIENCE',
+  skipShort: 'SKIP',
+  reopen: 'SCIENCE',
+  globeCredit: { mars: 'MARS · NASA/USGS VIKING MOSAIC', moon: 'MOON · NASA SVS CGI MOON KIT (LROC)' } as Record<TargetBody, string>,
+  eng: (res: string, size: string, dv: string, days: string) => `RES ${res}/PX · ${size} · Δv ${dv} · ${days}`,
+  marker: (n: string, name: string) => `${n} ${name}`,
+  moonRing: (name: string) => `${name} ORBIT`,
+  /** The globe's labels (spec: UI rule 41): every number is the engine's, the drawing is not to scale. */
+  periapsis: (from: string, to: string) => `PERIAPSIS ${from} → ${to}`,
+  periapsisNow: (h: string) => `PERIAPSIS ${h}`,
+  apoapsis: (from: string, to: string) => `APOAPSIS ${from} → ${to}`,
+  dragEng: (p: string, rho: string) => `P(DRAG HEATING) ${p} · ρ/ρ₀ ×${rho}`,
+  moonSub: (a: string) => `ORBITS ${a} UP`,
+  orbitChange: 'ORBIT CHANGE · OUT AND BACK',
+  limbSub: 'UPPER ATMOSPHERE · SIDEWAYS LOOK',
+  notToScale: 'ALTITUDES NOT TO SCALE',
+  orbiter: (name: string) => name,
+  /** The order strip over the globe while an OBSERVE crosses space, and the flyover when it lands. */
+  orderOut: (target: string, name: string, time: string) => `ORDER TO ${target} · REACHES ${name} IN ${time}`,
+  orderOutShort: (time: string) => `ORDER ARRIVES IN ${time}`,
+  scanning: (name: string, target: string) => `${name} IS OVER ${target} · SCANNING`,
+  /** The phone's bottom sheet. */
+  sheet: 'Science targets',
+  sheetMore: 'MORE ▴',
+  sheetLess: 'LESS ▾',
+};
+
+/** The Moon scene on the globe (spec: UI rules 45–46; design 3d/Moon Globe.html). Numbers come from moonOrbitView. */
+export const MOON_WORDS = {
+  earth: (dist: string, oneWay: string) => `EARTH · ${dist} · ${oneWay}`,
+  earthSub: 'ALWAYS SEES THE NEAR SIDE',
+  linkUp: (oneWay: string) => `LINK · LOCKED · ${oneWay}`,
+  linkLost: 'LINK · LOST · FAR SIDE',
+  far: 'NO SIGNAL — BEHIND THE MOON',
+  farSub: (lost: string, period: string) => `≈${lost} OF EVERY ${period} MIN`,
+  allInView: 'EARTH SEES THE WHOLE ORBIT TODAY',
+  shadow: 'IN THE MOON’S SHADOW',
+  shadowSub: (dark: string, period: string) => `${dark} OF EVERY ${period} MIN · ON BATTERY`,
+  trim: 'STATION-KEEPING',
+  trimNext: (when: string, dv: string) => `MASCONS PULL LOW ORBITS DOWN · NEXT TRIM BURNS IN ${when} · ${dv}`,
+  legend: 'What the ring shows',
+  notToScale: 'NOT TO SCALE · // EARTH DISTANCE SHORTENED',
+  farTarget: 'FAR SIDE · NO SIGNAL WHILE OBSERVING',
+  /** The orbit-only panel on Moon 1 and Moon 2. */
+  titleOf: (alt: string) => `MOON ORBIT · ${alt} UP`,
+  hint: 'EARTH CAN’T SEE YOU BEHIND THE MOON. ORDERS WAIT FOR THE LINK.',
+  reopen: 'MOON ORBIT',
+  done: 'DONE · KEEP FLYING',
+  doneShort: 'DONE',
+};
+
+/** The DOWNLINK drawer (spec: UI rule 40; design screen 01, DOWNLINK). */
+export const DOWNLINK = {
+  button: 'DOWNLINK',
+  waitingOn: (n: string, one: boolean, name: string) => `${n} ${one ? 'IMAGE' : 'IMAGES'} WAITING ON ${name}`,
+  allHome: (n: string) => `ALL ${n} IMAGES HOME`,
+  shortWaiting: (n: string) => `${n} WAITING`,
+  shortHome: 'ALL HOME',
+  open: 'OPEN ◂',
+  close: 'CLOSE ▸',
+  kicker: (dish: string, sent: string) => `TELETYPE 04 · DSN ${dish} · ${sent}`,
+  kickerPhone: (dish: string) => `TELETYPE 04 · DSN ${dish}`,
+  sentBefore: (t: string) => `SENT ${t} BEFORE IT PRINTED`,
+  noSignal: 'NO SIGNAL YET',
+  title: 'DOWNLINK',
+  closeKey: '✕ CLOSE',
+  big: (n: string, one: boolean) => `${n} ${one ? 'IMAGE' : 'IMAGES'} WAITING`,
+  bigHome: 'ALL IMAGES HOME',
+  nextPass: (t: string) => `NEXT DSN PASS IN ${t}`,
+  passOpen: (t: string) => `DSN PASS OPEN · ${t} LEFT`,
+  noPass: 'NO DSN PASS LEFT',
+  row: {
+    ordered: 'ORDER SENT',
+    observing: 'LOOKING',
+    waiting: 'WAITING',
+    'coming-down': '↓',
+    'on-its-way': 'ON ITS WAY',
+    home: 'HOME ✓',
+  } as Record<'ordered' | 'observing' | 'waiting' | 'coming-down' | 'on-its-way' | 'home', string>,
+  skip: 'SKIP TO PASS',
+  skipSub: (t: string) => `Fast-forward ${t}`,
+  receiving: 'RECEIVING…',
+  receivingSub: 'Line by line, as the bits arrive',
+  allDone: 'ALL HOME',
+  allDoneSub: 'Close the drawer',
+  nothing: 'NOTHING ORDERED',
+  nothingSub: 'Pick targets first',
+  reprint: 'PRINT AGAIN',
+  reprintSub: 'The last picture home',
+  imageOf: (i: string, n: string, name: string) => `IMAGE ${i} OF ${n} — ${name}`,
+  waitingDish: 'WAITING FOR THE DISH',
+  paperLoaded: 'PAPER LOADED · NOTHING TO PRINT YET',
+  printing: (pct: string, size: string) => `RECEIVING · ${pct} · ${size}`,
+  opened: 'OPENED IN FULL COLOUR',
+  voice: (name: string, line: string) => `${name}: “${line}”`,
+  credit: (credit: string, mission: string, id: string) => `IMAGE CREDIT: ${credit} · ${mission} · ${id}`,
+};
+
+/** A globe's body in words. */
+export const bodyWord = live('bodyWord', (b: TargetBody) => ({ mars: 'Mars', moon: 'Moon' })[b]);
+
+/** The globe's 2D/3D toggle (spec: UI rules 41, 44). */
+export const GLOBE_WORDS = {
+  toggleLabel: (body: string) => `Switch the ${body} globe between 3D and flat`,
+  to2d: '2D',
+  to3d: '3D',
+};
+
+/** The Mission Album (spec: UI rule 43; design screen 03, TELETYPE 03 · MISSION ALBUM). */
+export const ALBUM = {
+  label: 'Mission album',
+  kicker: (name: string) => `TELETYPE 03 · MISSION ALBUM — ${name}`,
+  meta: {
+    complete: (day: string) => `DAY 001–${day}`,
+    lost: (day: string) => `LAST CONTACT · DAY ${day}`,
+    extended: (day: string) => `DAY 001–${day} · AND COUNTING`,
+  },
+  returned: (n: string, total: string) => `${n} OF ${total} TARGETS RETURNED`,
+  lostOn: (name: string, day: string) => `${name} WAS LOST ON DAY ${day} —`,
+  madeIt: (n: string, one: boolean) => `${n} ${one ? 'IMAGE' : 'IMAGES'} MADE IT HOME.`,
+  noneMadeIt: 'NO IMAGE MADE IT HOME.',
+  ofScience: (pct: string) => `${pct} OF MISSION SCIENCE`,
+  soFar: (pct: string) => `${pct} SO FAR · STILL FLYING`,
+  subComplete: (name: string, day: string) => `${name} · PRIMARY MISSION COMPLETE · DAY ${day}`,
+  subExtended: (name: string, day: string) => `${name} · MISSION EXTENDED · DAY ${day}`,
+  bar: 'MISSION SCIENCE · ONE BLOCK PER TARGET, SIZED BY WHAT IT TEACHES',
+  barPct: (pct: string) => `${pct} RETURNED`,
+  plus: (pct: string) => `+${pct} SCIENCE`,
+  missed: (pct: string) => `${pct} MISSED`,
+  partialSci: 'PART OF AN IMAGE · NO SCIENCE',
+  notReturned: 'NOT RETURNED',
+  signalLost: '— SIGNAL LOST —',
+  partialCap: (pct: string) => `SIGNAL LOST WITH ${pct} SENT`,
+  credit: (credit: string, mission: string) => `IMAGE CREDIT: ${credit} · ${mission}`,
+  why: {
+    'never-ordered': () => 'NEVER OBSERVED',
+    'order-lost': () => 'THE ORDER NEVER ARRIVED',
+    'refused-fuel': () => 'SKIPPED · NOT ENOUGH FUEL',
+    'refused-unreachable': () => 'SKIPPED · OUT OF SIGHT FROM THIS ORBIT',
+    refused: () => 'SKIPPED · THE ROBOT SAID NO',
+    'never-taken': () => 'STILL LOOKING WHEN IT ENDED',
+    'never-sent': (day: string) => `TAKEN ON DAY ${day} · NEVER SENT`,
+    'still-possible': () => 'STILL POSSIBLE · EXTENDED MISSION',
+  } as Record<string, (day: string) => string>,
+  foot: {
+    complete: 'Every empty frame is a target still up there. Not this mission.',
+    lost: 'Pictures already home still count. The rest stay in its memory, somewhere over Mars.',
+    extended: 'Empty frames, and a robot with fuel left to fill them.',
+    all: 'Every target home. Nothing left up there to see.',
+    none: 'No picture made it home. Next time, order a target early and wait for a DSN pass.',
+  },
+  feed: 'FEED THE PAPER · FINAL TRANSMISSION ▾',
+};
+
+/** The Daily's science line (v0.8: science returned is the main score). */
+export const DAILY_SCIENCE = {
+  card: (pct: string) => `SCIENCE HOME ${pct}`,
+  share: (pct: string) => `🔭 ${pct} of the science home`,
+};
+
+// ---------------------------------------------------------------------------
+// The Mission Report's frame, the comic's sound words and the Daily screen
+
+export const REPORT_WORDS = {
+  title: 'MISSION REPORT',
+  titleLines: ['MISSION', 'REPORT'],
+  kicker: (mission: string, dest: string, lastDay: string) => `TELETYPE · ${mission.toUpperCase()} · ${dest.toUpperCase()} · DAY 000–${lastDay}`,
+  kickerPhone: (mission: string, day: string) => `${mission.toUpperCase()} · DAY ${day}`,
+  stars: (n: string) => `${n} of 3 stars`,
+  saved: 'WHAT SAVED YOU',
+  hurt: 'WHAT HURT YOU',
+  youVs: 'YOU vs THE REAL ONE',
+  youVsLabel: 'You vs the real mission',
+  you: 'YOU',
+  launch: 'LAUNCH',
+  plannedScience: 'PLANNED SCIENCE',
+  metric: { wetMass: 'LAUNCH MASS', dryMass: 'DRY MASS', propellant: 'PROPELLANT', powerAtArrival: 'POWER AT ARRIVAL', deltaVCapability: 'Δv CAPABILITY' },
+  noCompare: 'NO REAL MISSION TO COMPARE WITH YET',
+  realLesson: 'REAL LESSON',
+  fromFlight: 'FROM THIS FLIGHT',
+  toVerify: 'TO VERIFY',
+  lessonTitle: 'the lesson',
+  next: (title: string) => `NEXT: ${title.toUpperCase()}`,
+  flyAgain: 'FLY AGAIN',
+  lastWords: 'Opportunity’s last message',
+  nextStar: (hint: string) => `NEXT STAR · ${hint}`,
+};
+
+/** The comic's sound effects that are not a hazard's (PANEL_SOUND). */
+export const COMIC_WORDS = { boom: 'KA-BOOM', zap: 'ZZZT!', whoosh: 'FWOOOSH', beep: 'BEEP BEEP' };
+
+/** The Daily's result screen, its share card and its share text. */
+export const DAILY_WORDS = {
+  no: (n: string) => `DAILY #${n}`,
+  result: (n: string) => `Daily ${n} result`,
+  date: (date: string) => `${date} · MARS`,
+  theme: (danger: string) => `${danger.toUpperCase()} DAY`,
+  quiet: 'QUIET CRUISE',
+  stars: (n: string) => `${n} of 3 stars`,
+  how: 'How each danger went',
+  none: 'NO DANGER CARDS TODAY. A QUIET FLIGHT.',
+  result_: { held: 'held', cost: 'cost you', hurt: 'hurt' } as Record<'held' | 'cost' | 'hurt', string>,
+  realOf: (date: string) => `, real event of ${date}`,
+  day: 'DAY ',
+  dayShort: 'D',
+  alive: 'ROBOT ALIVE',
+  lost: 'ROBOT LOST',
+  endDay: (day: string) => ` · DAY ${day}`,
+  streak: (n: string) => `STREAK ${n}`,
+  madeIt: 'YOU MADE IT.',
+  gone: 'THE ROBOT IS GONE.',
+  show: 'SHOW YOUR CREW.',
+  copies: 'COPIES AS TEXT',
+  copied: 'COPIED ✓',
+  share: 'SHARE RESULT',
+  copy: 'COPY RESULT',
+  save: 'SAVE IMAGE',
+  report: 'MISSION REPORT',
+  next: (t: string) => `NEXT DAILY IN ${t}`,
+  shareAlive: (day: string) => `🤖 alive · day ${day}`,
+  shareLost: (day: string) => `💥 lost · day ${day}`,
+  shareQuiet: '🟦 a quiet flight',
+};
+
+// ---------------------------------------------------------------------------
+// Team mode (spec: Team mode; design: Signal Delay - Team Setup.dc.html, screens T1 and T2). Call signs stay English,
+// like robot names.
+
+/** The four roles: names, the duty line and what each one owns (with the design's icons). */
+export const ROLE_WORDS: Record<RoleId, { name: string; short: string; ab: string; duty: string; icon: SDIconName; owns: { label: string; icon: SDIconName }[] }> = {
+  'flight-director': {
+    name: 'FLIGHT DIRECTOR',
+    short: 'FLIGHT DIR.',
+    ab: 'FD',
+    duty: 'Sets the objective, guards the budget, makes the final call.',
+    icon: 'star',
+    owns: [
+      { label: 'OBJECTIVE', icon: 'star' },
+      { label: 'BUDGET', icon: 'lock' },
+      { label: 'FINAL CALL', icon: 'check' },
+    ],
+  },
+  'spacecraft-engineer': {
+    name: 'SPACECRAFT ENGINEER',
+    short: 'ENGINEER',
+    ab: 'ENG',
+    duty: 'Keeps power, battery and fuel in the green.',
+    icon: 'power',
+    owns: [
+      { label: 'POWER', icon: 'power' },
+      { label: 'BATTERY', icon: 'battery' },
+      { label: 'FUEL', icon: 'fuel' },
+    ],
+  },
+  'science-lead': {
+    name: 'SCIENCE LEAD',
+    short: 'SCIENCE',
+    ab: 'SCI',
+    duty: 'Chooses the instruments and the Mars targets.',
+    icon: 'camera',
+    owns: [
+      { label: 'INSTRUMENTS', icon: 'camera' },
+      { label: 'TARGETS', icon: 'orbit' },
+    ],
+  },
+  'comms-ops': {
+    name: 'COMMS & OPS',
+    short: 'COMMS & OPS',
+    ab: 'COM',
+    duty: 'Runs the antenna, the calls home and the command queue.',
+    icon: 'dish',
+    owns: [
+      { label: 'ANTENNA', icon: 'dish' },
+      { label: 'CALLS HOME', icon: 'calendar' },
+      { label: 'QUEUE', icon: 'computer' },
+    ],
+  },
+};
+
+/** Team Setup (T1) and the Home key. */
+export const TEAM_WORDS = {
+  menu: 'TEAM',
+  menuSub: 'Up to four players fly one robot together',
+  menuTag: 'CO-OP',
+  kicker: 'TEAM MODE · TO MARS',
+  /** The four steps along the top (numbered by the screen). */
+  steps: ['TEAM', 'PACK', 'FLY', 'REPORT'],
+  step: (n: string, word: string) => `${n} ${word}`,
+  crew: 'CREW',
+  whoFlies: 'WHO’S FLYING',
+  play: 'PLAY',
+  players: 'PLAYERS',
+  where: 'WHERE',
+  callSigns: 'CALL SIGNS',
+  callSignTitle: (sign: string) => `${sign}: tap for another call sign`,
+  solo: 'SOLO',
+  soloSub: 'One player holds all four roles.',
+  team: 'TEAM',
+  teamSub: 'Two to four players. Each role argues its case.',
+  local: 'LOCAL',
+  localSub: 'One shared screen: a classroom projector or one laptop.',
+  localShort: 'ONE SHARED SCREEN',
+  online: 'ONLINE ROOM',
+  onlineSub: 'A room code. Every player joins on their own phone.',
+  onlineShort: 'PHONES + ROOM CODE',
+  chipSolo: 'SOLO',
+  chipCrew: (n: string) => `LOCAL · ${n} CREW`,
+  chipOnline: 'ONLINE · PHONES',
+  lineOnline: 'ONLINE ROOM · EACH PLAYER ON A PHONE',
+  onlineCrew: 'THE PHONES PICK THEIR OWN ROLES IN THE ROOM.',
+  nextRoomMsg: 'NEXT: OPEN A ROOM AND SHARE THE CODE.',
+  nextRoom: 'NEXT · OPEN ROOM',
+  soloNoRoom: 'AN ONLINE ROOM IS FOR A TEAM: PICK TEAM FIRST.',
+  chipShort: (n: string) => `${n} CREW`,
+  role: (n: string, ab: string) => `ROLE ${n} · ${ab}`,
+  heldBy: 'HELD BY',
+  handOn: (role: string, sign: string) => `${role}, held by ${sign}: tap to hand it to the next player`,
+  roles: (n: string) => `${n} ROLES`,
+  lineSolo: 'SOLO FLIGHT · YOU HOLD ALL FOUR ROLES',
+  lineTeam: (n: string) => `${n} PLAYERS · ONE SHARED SCREEN`,
+  soloNoVotes: 'NO VOTES. EVERY CALL IS YOURS.',
+  doubled: (names: string, many: boolean) => `${names} ${many ? 'HOLD' : 'HOLDS'} TWO ROLES.`,
+  oneEach: 'ONE ROLE EACH. EVERY ROLE CAN OBJECT.',
+  idle: (names: string) => `${names} HAS NO ROLE YET. TAP A HELD BY CHIP.`,
+  nextObjective: 'NEXT: THE FLIGHT DIRECTOR PICKS THE MISSION OBJECTIVE.',
+  tapHint: 'Tap a HELD BY chip to hand a role to someone else.',
+  next: 'NEXT · OBJECTIVE',
+  /** Call signs or roles joined, as the design writes them. */
+  join: (names: string[]) => names.join(' + '),
+};
+
+/** The Mission Objective (T2): the Flight Director picks, the others agree or object. */
+export const OBJECTIVE_WORDS = {
+  title: 'MISSION OBJECTIVE',
+  phoneTitle: 'OBJECTIVE',
+  picks: 'PICKS',
+  fdChip: (sign: string) => `FLIGHT DIRECTOR · ${sign}`,
+  fdPhone: (sign: string) => `FLIGHT DIRECTOR ${sign} PICKS · OTHERS VOTE`,
+  soloPhone: 'YOU PICK · NOBODY ELSE VOTES',
+  num: (n: string) => `OBJECTIVE ${n}`,
+  matters: 'TARGETS THAT MATTER MOST',
+  share: (p: string) => `${p} OF SCIENCE`,
+  needs: (parts: string) => `COUNTS WITH: ${parts}`,
+  or: ' OR ',
+  packed: 'ON BOARD',
+  hardest: (why: string) => `HARDEST ON · ${why}`,
+  strainShort: (ab: string, why: string) => `${ab} · ${why}`,
+  why: { drag: 'DRAG RISK', data: 'MOST DATA', fuel: 'MOST FUEL' },
+  stampPick: 'FD PICK',
+  stampLocked: 'LOCKED',
+  agree: 'AGREE',
+  object: 'OBJECT',
+  auto: 'SAME PLAYER AS FLIGHT DIRECTOR · AGREES',
+  autoShort: 'AGREES',
+  voteTitle: (role: string, word: string) => `${role}: ${word}`,
+  msgPick: 'FLIGHT DIRECTOR: PICK AN OBJECTIVE.',
+  msgWait: (n: string, one: boolean) => `WAITING FOR ${n} ${one ? 'VOTE' : 'VOTES'}.`,
+  msgObject: (roles: string, one: boolean) => `${roles} ${one ? 'OBJECTS' : 'OBJECT'}. TALK, THEN RE-PICK OR OVERRULE.`,
+  msgAll: 'ALL AGREE. READY TO LOCK.',
+  msgLocked: (t: string) => `OBJECTIVE LOCKED: ${t}.`,
+  msgOverruled: (t: string) => `OVERRULED. OBJECTIVE LOCKED: ${t}.`,
+  lock: 'LOCK OBJECTIVE',
+  waiting: 'WAITING FOR VOTES',
+  overrule: 'OVERRULE · FINAL CALL',
+  nextPack: 'NEXT · PACK',
+  objectives: {
+    atmosphere: { title: 'STUDY THE ATMOSPHERE', line: 'Find out how much air Mars has left, and where the rest went.' },
+    surface: { title: 'MAP THE SURFACE', line: 'Shoot the biggest landmarks on the planet as sharp as the camera allows.' },
+    moons: { title: 'VISIT THE MOONS', line: 'Swing close to Phobos and Deimos and find out what they are made of.' },
+  } as Record<ObjectiveId, { title: string; line: string }>,
+};
+
+/** A solo player's objective (spec UI rule 56): picked in the Red Planet briefing, shown on Pack and in the report. */
+export const OBJECTIVE_PICK_WORDS = {
+  heading: 'PICK YOUR OBJECTIVE',
+  sub: 'What is this mission for? Its targets carry most of the science, but only with a part for that science on board.',
+  yours: 'YOUR OBJECTIVE',
+  group: 'Mission objective',
+  needs: (parts: string) => `NEEDS: ${parts}`,
+  onBoard: '✓ ON BOARD',
+  notOnBoard: '✗ NOT PACKED',
+  startLocked: 'PICK ONE TO START',
+  plate: 'OBJECTIVE',
+  change: 'CHANGE ▸',
+  changeLabel: 'Change the objective',
+  warn: (parts: string) => `PACK ${parts}, OR THIS OBJECTIVE CANNOT BE MET.`,
+  result: {
+    met: (title: string, pct: string) => `OBJECTIVE · ${title} · MET: ${pct} OF ITS SCIENCE CAME HOME`,
+    missed: (title: string, pct: string) => `OBJECTIVE · ${title} · MISSED: ONLY ${pct} OF ITS SCIENCE CAME HOME`,
+    noPart: (title: string) => `OBJECTIVE · ${title} · MISSED: NO PART FOR IT WAS ON BOARD`,
+  },
+};
+
+/** The preset quick messages (team.json `quick`): the only way the team talks, since players may be children. */
+export const QUICK_WORDS: Record<string, string> = {
+  agree: 'AGREE',
+  disagree: 'DISAGREE',
+  'too-heavy': 'TOO HEAVY',
+  'need-power': 'NEED MORE POWER',
+  'save-fuel': 'SAVE FUEL',
+  'science-first': 'SCIENCE FIRST',
+  'wait-signal': 'WAIT FOR THE SIGNAL',
+  'good-call': 'GOOD CALL',
+  help: 'HELP?',
+};
+
+/** Team Pack (design T3): the shelf by role, the shared limits, the conflict banner, the team line. */
+export const TEAM_PACK_WORDS = {
+  kicker: (objective: string) => `TEAM · OBJECTIVE: ${objective}`,
+  kickerNone: 'TEAM · TO MARS',
+  shelf: 'PARTS SHELF',
+  byRole: 'BY ROLE',
+  roleSpend: (cost: string, mass: string) => `${cost} · ${mass}`,
+  limits: 'SHARED LIMITS',
+  mass: 'MASS · SHARED',
+  budget: 'BUDGET · SHARED',
+  of: (used: string, limit: string) => `${used} / ${limit}`,
+  colRole: 'ROLE',
+  colMass: 'MASS',
+  colCost: 'COST',
+  colShare: 'SHARE',
+  over: { mass: 'TOO HEAVY · NEGOTIATE', cost: 'OVER BUDGET · NEGOTIATE', room: 'NO ROOM · NEGOTIATE' } as Record<'mass' | 'cost' | 'room', string>,
+  overBy: (amount: string) => `+${amount}`,
+  overLine: 'Talk it over: one cut fixes it. The Flight Director breaks a tie.',
+  roomLine: (part: string) => `${part} does not fit. Someone has to make room.`,
+  line: 'TEAM LINE · PRESET ONLY',
+  msgs: (n: string) => `${n} MSGS`,
+  empty: 'NO MESSAGES YET. TAP ONE BELOW.',
+  speakingAs: 'SPEAKING AS',
+  speakAs: (role: string) => `Speak as ${role}`,
+  say: (role: string, words: string) => `${role} says: ${words}`,
+  partRole: (part: string, role: string) => `${part} (${role})`,
+};
+
+/** Team Fly (design T4): the danger card's vote strip, the role tokens, the final call and the team's teletype lines. */
+export const TEAM_FLY_WORDS = {
+  kicker: (objective: string) => `FLY · ${objective}`,
+  whose: 'WHOSE DECISION',
+  stages: { recommend: 'RECOMMEND', vote: 'VOTE', call: 'FINAL CALL' } as Record<'recommend' | 'vote' | 'call', string>,
+  stage: (n: string, word: string) => `${n} · ${word}`,
+  allRoles: 'ALL ROLES',
+  allShort: 'ALL',
+  clockHeld: 'CLOCK PAUSED',
+  /** The option letters on the cards, in order. */
+  letters: ['A', 'B', 'C'],
+  pick: (letter: string, label: string) => `${letter} · ${label}`,
+  recommendedBy: (role: string, sign: string) => `RECOMMENDED BY ${role} · ${sign}`,
+  recommendNow: (role: string) => `${role}: TAP A CARD TO RECOMMEND`,
+  votes: 'VOTES · TAP YOUR TOKEN',
+  votesShort: 'VOTES',
+  votesOf: (n: string, total: string) => `${n} OF ${total}`,
+  token: (who: string, letter: string) => `${who}: vote ${letter}`,
+  tokenTaken: (who: string, letter: string) => `${who} voted ${letter}`,
+  finalCall: 'FINAL CALL',
+  leans: (letter: string) => `TEAM LEANS ${letter}`,
+  noLean: 'NO VOTES YET',
+  tapCard: 'TAP A CARD TO CHOOSE',
+  waiting: (n: string, one: boolean) => `WAITING FOR ${n} ${one ? 'VOTE' : 'VOTES'}`,
+  soloCall: 'YOUR CALL · TAP A CARD',
+  called: (letter: string) => `CALLED · ${letter}`,
+  lockedForVote: 'LOCKED FOR VOTE',
+  line: { recommend: (opt: string) => `RECOMMEND ${opt}`, vote: (opt: string) => `VOTE ${opt}`, call: (opt: string) => `FINAL CALL · ${opt}` },
+  keyOwner: (key: string, role: string) => `${key} (${role})`,
+  team: 'TEAM',
+};
+
+/** Team Debrief (design T5): the Mission Report's Team section, after the album and before FINAL TRANSMISSION. */
+export const TEAM_REPORT_WORDS = {
+  title: 'TEAM DEBRIEF',
+  crew: (n: string) => `CREW OF ${n}`,
+  objective: (title: string) => `OBJECTIVE: ${title}`,
+  decisions: (n: string, one: boolean) => `${n} ${one ? 'DANGER CARD' : 'DANGER CARDS'} VOTED`,
+  cols: { role: 'ROLE', key: 'KEY DECISION', effect: 'EFFECT ON THE MISSION', verdict: 'VERDICT' },
+  score: 'TEAM SCORE',
+  outOf: (max: string) => `/ ${max}`,
+  outOfShort: (max: string) => `/${max}`,
+  points: (p: string) => `+${p}`,
+  parts: { votes: 'AGREEMENTS', conflicts: 'CONFLICTS SOLVED', objective: 'OBJECTIVE MET' } as Record<'votes' | 'conflicts' | 'objective', string>,
+  partsShort: { votes: 'AGREED', conflicts: 'CONFLICTS', objective: 'OBJECTIVE' } as Record<'votes' | 'conflicts' | 'objective', string>,
+  nOf: (n: string, of: string) => `${n} / ${of}`,
+  votesLine: (n: string, of: string) => `${n} OF ${of} CALLS WENT WITH THE RECOMMENDATION`,
+  noVotes: 'NO DANGER CARD TO VOTE ON',
+  conflictsLine: (n: string, of: string) => `${n} OF ${of} BUDGET FIGHTS TALKED OUT`,
+  noConflicts: 'NO BUDGET FIGHTS',
+  objectiveLine: (title: string, met: boolean) => `${title} · ${met ? 'MET' : 'MISSED'}`,
+  met: 'MET',
+  missed: 'MISSED',
+  none: 'NONE',
+  note: 'The team score is the team’s own: it never changes the stars. Follow the recommendations, talk out every budget fight and meet the objective for a full score.',
+  next: 'NEXT · FINAL TRANSMISSION',
+  label: 'Team debrief',
+  /** The key decision's kicker. */
+  when: {
+    objective: 'BEFORE LAUNCH · OBJECTIVE',
+    card: (day: string, hazard: string) => `DAY ${day} · ${hazard}`,
+    observe: 'IN ORBIT · PICTURES',
+    dsn: 'DSN PASSES',
+    part: 'PACK · A PART',
+    none: 'NO CALL',
+  },
+  /** The key decision. */
+  call: {
+    objective: (title: string, overruled: boolean) => `LOCKED “${title}”${overruled ? ' OVER AN OBJECTION' : ''}.`,
+    recommended: (opt: string) => `RECOMMENDED ${opt}.`,
+    called: (opt: string) => `CALLED ${opt}.`,
+    agreed: (yes: string, no: string) => `TEAM AGREED ${yes}–${no}.`,
+    chose: (opt: string, yes: string, no: string) => `TEAM CHOSE ${opt} ${yes}–${no}.`,
+    observe: (n: string, one: boolean) => `ORDERED ${n} ${one ? 'PICTURE' : 'PICTURES'}.`,
+    dsn: (days: string) => `BOOKED ${days} OF DSN PASSES.`,
+    part: (name: string) => `PACKED THE ${name}.`,
+    none: 'NOTHING ON THE LOG.',
+  },
+  /** What it did. */
+  effect: {
+    objective: (share: string, met: boolean) => (met ? `Met: ${share} of the objective’s science came home.` : `Missed: only ${share} of the objective’s science came home.`),
+    noInstrument: 'No instrument for the objective was on board.',
+    cardGood: 'The craft came through it.',
+    cardBad: 'It went badly: the craft paid for it.',
+    observe: (home: string, ordered: string, names: string, science: string) => `${home} of ${ordered} came home (${names}). Science returned: ${science}.`,
+    dsn: 'More time on the big dishes, so more data came home.',
+    part: (dangers: string) => `It covered the ${dangers}, and that came.`,
+    partIdle: 'None of the dangers it covers came this time.',
+    none: 'No call fell to this role on this flight.',
+  },
+  /** The stamp, by the key decision's kind and its verdict. */
+  verdict: {
+    objective: { good: 'OBJECTIVE MET', bad: 'OBJECTIVE MISSED' },
+    card: { good: 'GOOD CALL', bad: 'COSTLY CALL' },
+    observe: { good: 'ALL HOME', mixed: 'SOME HOME', bad: 'NONE HOME' },
+    dsn: { good: 'MORE DATA' },
+    part: { good: 'WORTH IT', none: 'NOT NEEDED' },
+    none: { none: 'NO CALL' },
+  } as Record<string, Partial<Record<'good' | 'bad' | 'mixed' | 'none', string>>>,
+};
+
+/** The Online Room's host screen (design T6a; room states T7a) and the Home key a phone joins with. */
+export const ONLINE_WORDS = {
+  kicker: 'ONLINE ROOM · HOST',
+  roomCode: 'ROOM CODE',
+  steps: ['OPEN SIGNAL DELAY ON A PHONE', 'TAP JOIN · TYPE THE CODE', 'PICK A ROLE'],
+  chipOpen: (n: string, max: string) => `ROOM OPEN · ${n}/${max}`,
+  chipOpening: 'OPENING ROOM…',
+  chipLinked: (n: string, max: string) => `${n}/${max} LINKED`,
+  chipPaused: (n: string, max: string) => `${n}/${max} LINKED · PAUSED`,
+  chipOffline: 'RELAY OFFLINE',
+  chipClosed: 'ROOM CLOSED',
+  bar: (code: string, n: string, max: string) => `ROOM ${code} · ${n}/${max}`,
+  slotJoined: (sign: string) => `${sign} · JOINED ON PHONE`,
+  slotWaiting: 'WAITING…',
+  slotAway: (sign: string, clock: string) => `${sign} · RECONNECTING ${clock}`,
+  slotHanded: (sign: string, by: string) => `${by} HOLDS · ${sign} CAN RECLAIM`,
+  slotNoRelay: '— NO RELAY',
+  freeSlot: (role: string, sign: string) => `${role}, ${sign}: tap to free this slot`,
+  msgNeedDirector: 'WAITING FOR A FLIGHT DIRECTOR. THE MISSION NEEDS ONE TO START.',
+  msgEmpty: (roles: string, director: string) => `EMPTY: ${roles}. START NOW AND ${director} HOLDS THEM.`,
+  msgReady: 'ALL FOUR ROLES FILLED. READY.',
+  msgOpening: 'OPENING THE ROOM…',
+  msgAway: (sign: string, clock: string) => `${sign} DROPPED. CLOCK PAUSED. HOLDING THE ROLE FOR ${clock}.`,
+  msgHanded: (by: string, role: string, sign: string) => `${by} HOLDS ${role}. ${sign} GETS IT BACK THE MOMENT THEY REJOIN.`,
+  msgRunning: 'MISSION UNDER WAY. EACH PHONE SHOWS ONLY ITS OWN ROLE.',
+  msgOffline: (tries: string, clock: string) => `RELAY UNREACHABLE · TRIED ${tries}× · NEXT TRY IN ${clock}.`,
+  msgNotSetUp: 'THIS COPY OF THE GAME HAS NO ROOM RELAY SET UP.',
+  msgResume: 'TYPE THE RESUME CODE. EVERY PHONE THAT WAS IN THE ROOM SHOWS IT.',
+  msgResumeUnknown: 'NO MISSION WITH THAT CODE ON THIS SCREEN (OR IT IS TOO OLD).',
+  msgClosed: (code: string) => `THE ROOM TIMED OUT. RESUME CODE: ${code}.`,
+  note: 'This screen keeps showing the full game. Phones show only their own role.',
+  noteAway: 'A dropped phone never loses its role. HAND NOW passes it on, so play goes on.',
+  noteOffline: 'Local co-op keeps the same four roles on this one screen. The mission itself does not change.',
+  noteResume: 'The mission comes back from this browser: the same room code, the same log.',
+  start: 'START MISSION',
+  handNow: (ab: string, sign: string) => `HAND ${ab} TO ${sign}`,
+  relay: 'ROOM RELAY',
+  offline: 'OFFLINE',
+  offlineLine: 'PHONES CAN’T JOIN RIGHT NOW. THIS SCREEN STILL WORKS.',
+  retry: 'RETRY',
+  retryLine: (tries: string, clock: string) => `TRY ${tries} · AUTO IN ${clock}`,
+  local: 'PLAY LOCAL CO-OP',
+  localSub: 'ONE SHARED SCREEN · SAME FOUR ROLES',
+  paused: (day: string) => `MISSION PAUSED · DAY ${day}`,
+  reconnecting: 'RECONNECTING',
+  roleHanded: 'ROLE HANDED',
+  reconWho: (sign: string, role: string) => `${sign} · ${role}`,
+  handedWho: (role: string, sign: string) => `${role} → ${sign}`,
+  reconLine: (clock: string) => `ROLE HELD FOR ${clock} · NOTHING HAPPENS TO THE ROBOT`,
+  handedLine: (sign: string) => `${sign} GETS THE ROLE BACK WHEN THEIR PHONE RECONNECTS.`,
+  resume: 'RESUME A MISSION',
+  resumeKey: 'RESUME',
+  resumeOpen: 'RESUME A MISSION ▸',
+  resumeCode: 'RESUME CODE',
+  menu: 'JOIN',
+  menuSub: 'Join a team’s room on this phone',
+  menuTag: 'ROOM',
+};
+
+/** Joining a room on a phone (design T6b; relay offline T7e). */
+export const JOIN_WORDS = {
+  title: 'JOIN A ROOM',
+  top: 'JOIN',
+  codeLabel: 'ROOM CODE · ON THE BIG SCREEN',
+  codeInput: 'Room code',
+  look: 'FIND ROOM',
+  searching: 'LOOKING FOR THE ROOM…',
+  found: 'ROOM FOUND',
+  badCode: 'A ROOM CODE IS A WORD AND THREE CHARACTERS, LIKE THE ONE ON THE BIG SCREEN.',
+  pickRole: 'PICK YOUR ROLE',
+  free: 'FREE',
+  you: '▸ YOU',
+  joinAs: (role: string) => `JOIN AS ${role}`,
+  pickFirst: 'PICK A ROLE FIRST',
+  callSign: (sign: string) => `YOUR CALL SIGN · ${sign}`,
+  full: 'THIS ROOM IS FULL.',
+  started: 'THE MISSION HAS STARTED. A PHONE CAN TAKE OVER A SEAT THAT IS WAITING FOR ITS PHONE.',
+  takeOver: (sign: string) => `TAKE OVER ${sign}’S SEAT`,
+  protocol: 'THIS PHONE HAS AN OLDER COPY OF THE GAME. RELOAD THE PAGE.',
+  offlineTitle: 'RELAY OFFLINE',
+  offlineBody: (clock: string) => `Can’t reach the room relay. Your code is fine: the network is the problem. Next try in ${clock}.`,
+  notSetUp: 'This copy of the game has no room relay set up. Play local co-op instead.',
+  tryN: (n: string) => `TRY ${n}`,
+  noRelay: 'NO RELAY? PLAY LOCAL CO-OP',
+  passPhone: 'PASS THIS PHONE AROUND',
+  passPhoneSub: 'All four roles on one phone. Hand it over at each vote.',
+  gather: 'GATHER AT THE HOST SCREEN',
+  gatherSub: 'Ask the host to tap PLAY LOCAL CO-OP. Everyone plays on the big screen.',
+  localHere: 'LOCAL CO-OP ON THIS PHONE',
+  retryNow: 'RETRY NOW',
+};
+
+/** A phone's controller (design T6c–f; room states T7b, T7c, T7d). */
+export const CONTROLLER_WORDS = {
+  youAre: (sign: string) => `YOU ARE · ${sign}`,
+  youreIn: (sign: string) => `YOU’RE IN · ${sign}`,
+  linked: 'LINKED',
+  noSignal: 'NO SIGNAL',
+  roomClosed: 'ROOM CLOSED',
+  day: (d: string) => `DAY ${d}`,
+  crew: (n: string, max: string) => `CREW · ${n} OF ${max}`,
+  hostBig: 'HOST · BIG SCREEN',
+  open: 'OPEN',
+  meTag: (sign: string) => `${sign} · YOU`,
+  waiting: 'WAITING FOR THE FLIGHT DIRECTOR TO START',
+  waitingNoFd: 'NO FLIGHT DIRECTOR YET. SOMEONE TAKE IT.',
+  openRoles: (roles: string) => `STILL OPEN: ${roles} · THE FLIGHT DIRECTOR CAN START ANYWAY`,
+  allIn: 'ALL FOUR IN · READY TO START',
+  keepOpen: 'Keep this screen open. When the mission starts, it becomes your controls.',
+  changeRole: 'CHANGE ROLE',
+  leave: 'LEAVE ROOM',
+  turnMine: { recommend: 'YOUR TURN · RECOMMEND', vote: 'YOUR TURN · VOTE', call: 'YOUR TURN · MAKE THE FINAL CALL' } as Record<'recommend' | 'vote' | 'call', string>,
+  turnWait: (abs: string) => `WAITING · ${abs}`,
+  turnDone: (pick: string) => `ORDER SENT · ${pick}`,
+  calm: 'NO DANGER RIGHT NOW',
+  calmLine: 'Watch the big screen. A danger card lands here the moment Earth sees it.',
+  objective: 'OBJECTIVE',
+  notSet: 'NOT SET',
+  ends: 'MISSION ENDS IN',
+  danger: (title: string) => `DANGER · ${title}`,
+  recBy: (role: string, pick: string) => `RECOMMENDED BY ${role}: ${pick}`,
+  waitRec: (role: string) => `WAITING FOR ${role} TO RECOMMEND`,
+  teamVotes: 'TEAM VOTES',
+  finalCall: 'FINAL CALL',
+  finalPick: 'TAP A CHOICE ABOVE FIRST',
+  finalSend: (pick: string) => `SEND ${pick}`,
+  finalOverrule: (pick: string) => `SEND ${pick} · OVERRULES THE TEAM`,
+  yourRec: 'YOUR RECOMMENDATION · THE TEAM SEES IT',
+  yourVote: 'YOUR VOTE',
+  voteTag: 'TAP TO VOTE',
+  votedTag: 'YOUR VOTE',
+  gauges: 'THE CRAFT',
+  gauge: { power: 'POWER', fuel: 'FUEL', data: 'DATA', systems: 'SYSTEMS' } as Record<'power' | 'fuel' | 'data' | 'systems', string>,
+  targets: 'SCIENCE TARGETS',
+  targetsLater: 'TARGETS OPEN IN THE SCIENCE ORBIT.',
+  observe: 'OBSERVE',
+  targetState: { ready: 'READY', ordered: 'ORDERED', observing: 'OBSERVING', 'on-board': 'ON BOARD', sent: 'SENDING', home: 'HOME', refused: 'REFUSED' } as Record<string, string>,
+  nextPass: 'NEXT DSN PASS',
+  noPass: 'NONE IN VIEW',
+  passNow: 'IN VIEW NOW',
+  lightTime: 'ONE-WAY LIGHT TIME',
+  queue: 'COMMAND QUEUE',
+  queueEmpty: 'NOTHING ON ITS WAY.',
+  queueKinds: { 'power-plan': 'POWER PLAN', observe: 'OBSERVE', respond: 'DANGER ORDER', 'standing-orders': 'STANDING ORDERS' } as Record<string, string>,
+  book: (dish: string) => `BOOK THE BIG DISH · ${dish}`,
+  booked: 'BIG DISH BOOKED',
+  lost: 'SIGNAL LOST',
+  reconnectTry: (n: string) => `RECONNECTING · TRY ${n}`,
+  lostBody: 'The team’s clock is paused. Your controls come back exactly as you left them.',
+  teamSees: 'WHAT YOUR TEAM SEES',
+  teamSeesLine: (sign: string) => `${sign} RECONNECTING · CLOCK PAUSED`,
+  retryNow: 'RETRY NOW',
+  hostLeft: 'THE HOST SCREEN CLOSED',
+  expired: 'THE ROOM TIMED OUT',
+  ended: 'THE HOST ENDED THE ROOM',
+  hostLeftBody: 'Nothing is lost. The mission is saved at its last order.',
+  roomEnded: 'ROOM ENDED',
+  resumeCode: 'RESUME CODE',
+  resumeHow: (code: string) => `THE HOST TYPES THIS ON THE BIG SCREEN. THEN EVERYONE REJOINS WITH ${code}.`,
+  copy: 'COPY RESUME CODE',
+  copied: 'CODE COPIED ✓',
+  backHome: 'BACK TO HOME',
+  savedRole: 'YOUR ROLE',
+  savedStage: 'WHERE',
+  stages: { lobby: 'WAITING ROOM', objective: 'OBJECTIVE', pack: 'PACKING', fly: 'IN FLIGHT', report: 'REPORT' } as Record<string, string>,
+  report: 'MISSION OVER · THE REPORT IS ON THE BIG SCREEN',
+  bounce: { 'too-fast': 'SLOW DOWN · ONE TAP AT A TIME', 'not-your-role': 'THAT IS NOT YOUR ROLE NOW', taken: 'SOMEONE ELSE HAS THAT ROLE' } as Record<string, string>,
+  bounced: 'THE HOST COULD NOT TAKE THAT',
+  last: (ab: string, words: string) => `LAST · [${ab}] ${words}`,
+  noLast: 'NO MESSAGES YET',
+  pickObjective: 'PICK THE OBJECTIVE',
+  fdPicks: (sign: string) => `THE FLIGHT DIRECTOR (${sign}) PICKS`,
+  yourParts: 'YOUR PARTS',
+  packedTag: 'PACKED',
+  addTag: 'ADD',
+  fullTag: 'NO ROOM',
+  launch: 'LAUNCH',
+  launchWait: 'THE FLIGHT DIRECTOR LAUNCHES',
+  blocked: 'NOT READY TO LAUNCH',
+  speaking: 'QUICK MESSAGES',
+};
+
+/** The default mission names (starters.ts), shown in the player's language; a renamed mission keeps its name. */
+export const MISSION_NAMES: Record<string, string> = {
+  'Silver Lantern': 'Silver Lantern',
+  'Cloud Diver': 'Cloud Diver',
+  'Red Atmosphere': 'Red Atmosphere',
+  'Pebble Catcher': 'Pebble Catcher',
+  'Storm Watcher': 'Storm Watcher',
+};

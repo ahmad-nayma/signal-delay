@@ -1,0 +1,486 @@
+// Signal Delay Pack (spec: UI rules, Pack). The rocket nose is a backpack: every part takes squares (volume),
+// and mass is a separate limit read from the launch meter. A packed part changes the design that evaluateDesign
+// and Mission operations fly: instruments, the dish, array area, propellant, battery size, or a protection
+// (pack.json). The danger deck shows which dangers those effects touch; the launch calendar rates each day with
+// the same launch and Δv meters. Pure functions; no numbers are made up here.
+import packJson from '../data/pack.json';
+import { DISH_SIZES, PACKAGES_FOR, SCIENCE_PACKAGES } from './cadet';
+import { DESTINATIONS, HAZARDS, LAUNCH_VEHICLES, lookup, RIDESHARES } from './data';
+import { evaluateDesign, type FullEvaluation } from './index';
+import { launchMassCheck, rideshareLaunchPrice, rideshareMassCheck } from './launch';
+import { withLauncher, withRideshare } from './designEdits';
+import { marginStatus } from './meter';
+import { stationKeeping } from './propulsion';
+import { SCIENCE_RULES } from './science';
+import { arrivalDeltaV, bestArrival, maxFlightDays, transferForDesign } from './trajectory';
+import type { Design, DesignKit, DestinationId, MeterStatus, Sourced } from './types';
+
+type S = Sourced<number>;
+interface PartBase {
+  kind: 'bus' | 'engine' | 'instrument' | 'dish' | 'power' | 'battery' | 'propellant' | 'kit';
+  locked?: boolean;
+  w: S;
+  h: S;
+  /** Dangers this part's effect touches (hazard types, or 'eclipse' / 'conjunction'). */
+  covers: string[];
+  instrumentId?: string;
+  extraArrayArea_m2?: S;
+  extraRtg?: S;
+  batteryFactor?: S;
+  extraPropellant?: S;
+  mass_kg?: S;
+  coldFactor?: S;
+  hazardFactor?: Record<string, S>;
+  autopilot?: boolean;
+}
+
+export type PartId =
+  | 'computer'
+  | 'engine'
+  | 'camera'
+  | 'spectrometer'
+  | 'magnetometer'
+  | 'radar'
+  | 'sniffer'
+  | 'dish'
+  | 'solar'
+  | 'battery'
+  | 'tank'
+  | 'heater'
+  | 'shield'
+  | 'bumper'
+  | 'spare'
+  | 'autopilot';
+
+export const PACK = packJson as unknown as {
+  grid: { cols: S; rows: S };
+  coverage: { covered: S; some: S };
+  calendar: { days: S; before: S; searchStep: S };
+  /** A level's own development budget (game rule), by level id. */
+  levelBudgets: Record<string, S>;
+  parts: Record<PartId, PartBase>;
+};
+
+/** The level's own budget, if it has one (Cloud Diver); every other level keeps the mission class cap. */
+export const levelCostCap = (levelId: string): S | undefined => PACK.levelBudgets[levelId];
+
+export interface Placed {
+  id: PartId;
+  r: number;
+  c: number;
+}
+export type Packed = Placed[];
+
+const COLS = () => PACK.grid.cols.value;
+const ROWS = () => PACK.grid.rows.value;
+const part = (id: PartId) => PACK.parts[id];
+const INSTRUMENT_PART: Record<string, PartId> = Object.fromEntries(
+  (Object.entries(PACK.parts) as [PartId, PartBase][]).filter(([, p]) => p.instrumentId).map(([id, p]) => [p.instrumentId!, id]),
+);
+
+// ---------------------------------------------------------------------------
+// The nose (volume)
+
+function occupied(packed: Packed): boolean[][] {
+  const g = Array.from({ length: ROWS() }, () => Array<boolean>(COLS()).fill(false));
+  for (const q of packed) {
+    const p = part(q.id);
+    for (let r = 0; r < p.h.value; r++) for (let c = 0; c < p.w.value; c++) if (g[q.r + r]) g[q.r + r]![q.c + c] = true;
+  }
+  return g;
+}
+
+/** The first free slot for a part, row by row (as the design), or undefined if it has no room. */
+export function fitPart(packed: Packed, id: PartId): { r: number; c: number } | undefined {
+  const p = part(id);
+  const g = occupied(packed);
+  for (let r = 0; r <= ROWS() - p.h.value; r++)
+    for (let c = 0; c <= COLS() - p.w.value; c++) {
+      let free = true;
+      for (let i = 0; i < p.h.value && free; i++) for (let j = 0; j < p.w.value; j++) if (g[r + i]![c + j]) free = false;
+      if (free) return { r, c };
+    }
+  return undefined;
+}
+
+/** Pack a part in its first free slot. The same pack if it is already packed; undefined if there is no room. */
+export function packPart(packed: Packed, id: PartId): Packed | undefined {
+  if (packed.some((q) => q.id === id)) return packed;
+  const at = fitPart(packed, id);
+  return at ? [...packed, { id, ...at }] : undefined;
+}
+
+export const unpackPart = (packed: Packed, id: PartId): Packed => (part(id).locked ? packed : packed.filter((q) => q.id !== id));
+
+export function noseSquares(packed: Packed): { used: number; free: number; total: number } {
+  const total = COLS() * ROWS();
+  const used = packed.reduce((a, q) => a + part(q.id).w.value * part(q.id).h.value, 0);
+  return { used, free: total - used, total };
+}
+
+export const footprint = (id: PartId) => ({ w: part(id).w.value, h: part(id).h.value, squares: part(id).w.value * part(id).h.value });
+
+// ---------------------------------------------------------------------------
+// Shelf and the packed craft
+
+/** The parts a destination offers: the locked computer and engine, its instruments, and every extra that applies. */
+export function shelfFor(destination: DestinationId): PartId[] {
+  const instruments = [...new Set(PACKAGES_FOR[destination].flatMap((p) => SCIENCE_PACKAGES[p]))].map((i) => INSTRUMENT_PART[i]).filter((x): x is PartId => !!x);
+  const extras: PartId[] = ['dish', 'solar', 'battery', 'tank', 'heater', 'shield', 'spare', 'autopilot'];
+  if (HAZARDS.debris?.destinations.includes(destination)) extras.splice(6, 0, 'bumper');
+  return ['computer', 'engine', ...instruments, ...extras];
+}
+
+/** The starting pack: the locked parts, then the starter design's own instruments (in order, where they fit). */
+export function initialPack(base: Design, shelf: PartId[]): Packed {
+  let p: Packed = [];
+  for (const id of shelf.filter((x) => part(x).locked)) p = packPart(p, id) ?? p;
+  for (const inst of base.instrumentIds) {
+    const id = INSTRUMENT_PART[inst];
+    if (id && shelf.includes(id)) p = packPart(p, id) ?? p;
+  }
+  return p;
+}
+
+/** The design the packed nose flies: the base design with each part's effect applied (pack.json). */
+export function buildPackDesign(base: Design, packed: Packed): Design {
+  const has = (id: PartId) => packed.some((q) => q.id === id);
+  const ids = packed.map((q) => q.id);
+  const instrumentIds = ids.map((id) => part(id).instrumentId).filter((x): x is string => !!x);
+  let d: Design = { ...base, instrumentIds, packedParts: ids, power: { ...base.power }, comms: { ...base.comms } };
+  // Cadet Mars flies a short prime campaign of science targets, so a run lasts about five minutes (spec: Science targets).
+  if (base.destination === 'mars') d.scienceDays = SCIENCE_RULES.cadetCampaign_days.value;
+  if (has('dish')) d.comms.dishDiameter_m = DISH_SIZES.large.value;
+  if (has('solar')) {
+    const s = part('solar');
+    if (d.power.type === 'rtg') d.power.rtgCount = (d.power.rtgCount ?? 0) + s.extraRtg!.value;
+    else d.power.arrayArea_m2 = (d.power.arrayArea_m2 ?? 0) + s.extraArrayArea_m2!.value;
+  }
+  if (has('tank')) d = { ...d, propellant_kg: base.propellant_kg * (1 + part('tank').extraPropellant!.value) };
+  const kit: DesignKit = {};
+  if (has('battery')) kit.batteryFactor = part('battery').batteryFactor!.value;
+  const extraMass = ids.reduce((a, id) => a + (part(id).kind === 'kit' ? part(id).mass_kg!.value : 0), 0);
+  if (extraMass > 0) kit.extraMass_kg = extraMass;
+  for (const id of ids) {
+    const p = part(id);
+    if (p.coldFactor) kit.coldFactor = p.coldFactor.value;
+    if (p.autopilot) kit.autopilot = true;
+    if (p.hazardFactor) kit.hazardFactor = { ...kit.hazardFactor, ...Object.fromEntries(Object.entries(p.hazardFactor).map(([k, v]) => [k, v.value])) };
+  }
+  if (Object.keys(kit).length) d.kit = kit;
+  else delete d.kit;
+  return d;
+}
+
+// ---------------------------------------------------------------------------
+// Blockers: each one names the limit that failed
+
+export type PackBlockerCode = 'too-heavy' | 'no-power' | 'no-fuel' | 'no-capture' | 'flight-too-long' | 'no-science' | 'over-budget' | 'other';
+export interface PackBlocker {
+  code: PackBlockerCode;
+  /** The engine's own sentence (with its numbers), for Engineer mode. */
+  engine?: string;
+  /** "No fuel": the shelf part that clears it (checked by evaluating the craft with it), and why the craft needs it. */
+  fix?: FuelFix;
+}
+
+export interface FuelFix {
+  part: PartId;
+  /** 'station-keeping': the low Moon orbit's trim burns (spec: Moon orbit); 'fuel': the trip itself. */
+  why: 'station-keeping' | 'fuel';
+  /** The science orbit's mean altitude (m), for the words. */
+  orbitAlt_m: number;
+}
+
+/** What packBlockers needs to suggest a fix: the unpacked design (with the launch day) and the level's shelf. */
+export interface FixContext {
+  base: Design;
+  shelf: PartId[];
+}
+
+/** The extra tank, if it is on the shelf, not packed, fits in the nose and really clears "no fuel". */
+function fuelFix(packed: Packed, ctx: FixContext): FuelFix | undefined {
+  const tank: PartId = 'tank';
+  if (!ctx.shelf.includes(tank) || packed.some((q) => q.id === tank)) return undefined;
+  const withTank = packPart(packed, tank);
+  if (!withTank) return undefined;
+  const d = buildPackDesign(ctx.base, withTank);
+  if (evaluateDesign(d).blockers.some((b) => /propellant|Δv/i.test(b))) return undefined;
+  const o = d.scienceOrbit ?? d.captureOrbit;
+  return { part: tank, why: stationKeeping(d) ? 'station-keeping' : 'fuel', orbitAlt_m: ((o.periapsis_km + o.apoapsis_km) / 2) * 1000 };
+}
+
+export function packBlockers(packed: Packed, ev: FullEvaluation, ctx?: FixContext): PackBlocker[] {
+  const out: PackBlocker[] = [];
+  // Worked out once, on the first "no fuel" (null: not yet).
+  let fix: FuelFix | undefined | null = null;
+  if (!packed.some((q) => part(q.id).kind === 'instrument')) out.push({ code: 'no-science' });
+  for (const b of ev.blockers) {
+    const code: PackBlockerCode = /too heavy|cannot reach C3|secondary slot/i.test(b)
+      ? 'too-heavy'
+      : /power/i.test(b)
+        ? 'no-power'
+        : /propellant|Δv/i.test(b)
+          ? 'no-fuel'
+          : /capture|cannot brake|ion/i.test(b)
+            ? 'no-capture'
+            : /revolution|loop/i.test(b)
+              ? 'flight-too-long'
+              : 'other';
+    if (code === 'no-fuel' && ctx && fix === null) fix = fuelFix(packed, ctx);
+    out.push({ code, engine: b, ...(code === 'no-fuel' && fix ? { fix } : {}) });
+  }
+  // Over the budget blocks launch like too much weight (spec UI rule 57); listed after the engine's own blockers.
+  if (ev.meters.cost.status === 'over') out.push({ code: 'over-budget' });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Mission limits (spec UI rule 57): the four limits the player packs against, straight from the meters
+
+export type LimitKey = 'weight' | 'budget' | 'power' | 'data';
+export interface PackLimit {
+  key: LimitKey;
+  meter: 'mass' | 'cost' | 'power' | 'data';
+  /** What the craft uses (kg, $M, W needed, bits a day produced) and the limit it is held to. */
+  used: number;
+  limit: number;
+  /** used / limit, 0–1 (a bar never draws past full; `status` says over). */
+  fill: number;
+  status: MeterStatus;
+}
+
+const LIMIT_METERS: [LimitKey, PackLimit['meter']][] = [
+  ['weight', 'mass'],
+  ['budget', 'cost'],
+  ['power', 'power'],
+  ['data', 'data'],
+];
+
+/** The four mission limits of an evaluated craft. */
+export function packLimits(ev: FullEvaluation): PackLimit[] {
+  return LIMIT_METERS.map(([key, meter]) => {
+    const m = ev.meters[meter];
+    return { key, meter, used: m.used, limit: m.limit, fill: m.limit > 0 ? Math.max(0, Math.min(1, m.used / m.limit)) : 1, status: m.status };
+  });
+}
+
+export interface LimitChange {
+  key: LimitKey;
+  /** Change in what is used, and in the limit, since the last flight (now − last). */
+  used: number;
+  limit: number;
+  /** The last flight's fill of this bar, 0–1 (Pack marks it). */
+  lastFill: number;
+}
+
+/** Each mission limit against the last flight's (spec UI rule 60). */
+export function limitChanges(now: PackLimit[], last: PackLimit[]): LimitChange[] {
+  return now.map((n) => {
+    const l = last.find((x) => x.key === n.key) ?? n;
+    return { key: n.key, used: n.used - l.used, limit: n.limit - l.limit, lastFill: l.fill };
+  });
+}
+
+/** The limits if a shelf part were packed too (on the launch day, if given); undefined when it does not fit. */
+export function packLimitsWith(base: Design, packed: Packed, id: PartId, day?: CalendarDay): PackLimit[] | undefined {
+  const next = packPart(packed, id);
+  if (!next) return undefined;
+  const d = buildPackDesign(base, next);
+  return packLimits(evaluateDesign(day ? onDay(d, day) : d));
+}
+
+// ---------------------------------------------------------------------------
+// Danger deck
+
+export interface DeckCard {
+  id: string;
+  kind: 'eclipse' | 'conjunction' | 'hazard';
+  /** Hazards: warned by Earth first, or found by the craft. */
+  detectedBy?: 'earth' | 'craft';
+  parts: PartId[];
+  stamp: 'covered' | 'some' | 'none';
+}
+
+/** The destination's dangers, foreseeable first, and which packed parts cover each (game rule thresholds). */
+export function dangerDeck(destination: DestinationId, packed: Packed): DeckCard[] {
+  const dest = DESTINATIONS[destination];
+  const cards: Omit<DeckCard, 'parts' | 'stamp'>[] = [];
+  if (dest.missionType === 'orbiter') cards.push({ id: 'eclipse', kind: 'eclipse' });
+  if (destination !== 'moon') cards.push({ id: 'conjunction', kind: 'conjunction' });
+  for (const [id, h] of Object.entries(HAZARDS)) {
+    if (h.options.length && !h.liveOnly && !h.science && h.destinations.includes(destination)) cards.push({ id, kind: 'hazard', detectedBy: h.detectedBy });
+  }
+  return cards.map((c) => {
+    const parts = packed.map((q) => q.id).filter((id) => part(id).covers.includes(c.id));
+    const stamp = parts.length >= PACK.coverage.covered.value ? 'covered' : parts.length >= PACK.coverage.some.value ? 'some' : 'none';
+    return { ...c, parts, stamp };
+  });
+}
+
+/** Parts on the shelf that cover a danger (for the hover links). */
+export const partsCovering = (shelf: PartId[], danger: string) => shelf.filter((id) => part(id).covers.includes(danger));
+export const coversOf = (id: PartId) => [...part(id).covers];
+
+// ---------------------------------------------------------------------------
+// Launch calendar
+
+export interface CalendarDay {
+  date: string;
+  /** Lowest-energy arrival for that launch day (Moon: the fixed transfer). */
+  arrivalDate?: string;
+  c3?: number;
+  vInfArr_ms?: number;
+  flightDays?: number;
+}
+
+const addDays = (iso: string, d: number) => new Date(Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) + d * 86_400_000).toISOString().slice(0, 10);
+
+/** The calendar's transfers: PACK.calendar.days launch days, starting `before` days ahead of the best one. */
+export function calendarTransfers(destination: DestinationId, bestDate: string): CalendarDay[] {
+  const n = PACK.calendar.days.value;
+  const start = -PACK.calendar.before.value;
+  return Array.from({ length: n }, (_, i) => {
+    const date = addDays(bestDate, start + i);
+    if (destination === 'moon') {
+      const t = transferForDesign({ destination, launchDate: date, arrivalDate: date });
+      return { date, arrivalDate: date, c3: t.c3_km2s2, vInfArr_ms: t.vInfArr_ms, flightDays: t.flightDays };
+    }
+    try {
+      const t = bestArrival(destination, date, { stepDays: PACK.calendar.searchStep.value });
+      return { date, arrivalDate: t.arrivalDate, c3: t.c3_km2s2, vInfArr_ms: t.vInfArr_ms, flightDays: t.flightDays };
+    } catch {
+      return { date };
+    }
+  });
+}
+
+export interface DayQuality {
+  quality: 'good' | 'soso' | 'bad';
+  massMargin?: number;
+  deltaVMargin?: number;
+  capacity_kg?: number;
+}
+
+const QUALITY: Record<MeterStatus, DayQuality['quality']> = { ok: 'good', warning: 'soso', over: 'bad' };
+
+/**
+ * How a launch day suits the packed craft: the launch meter at that day's C3 and the Δv meter with that day's
+ * arrival burn (the rest of the budget is the same). Quality is the worse status: ok → good, warning → so-so,
+ * over (or no transfer) → bad.
+ */
+export function dayQuality(design: Design, ev: FullEvaluation, day: CalendarDay): DayQuality {
+  if (day.c3 === undefined || day.vInfArr_ms === undefined || day.flightDays === undefined) return { quality: 'bad' };
+  if (design.destination !== 'moon' && day.flightDays >= maxFlightDays(design.destination)) return { quality: 'bad' };
+  const lv = lookup(LAUNCH_VEHICLES, design.launchVehicleId, 'launch vehicle');
+  const wet = ev.details.wetMass_kg;
+  const ride = design.rideshareId ? RIDESHARES[design.rideshareId] : undefined;
+  const launch = ride
+    ? rideshareMassCheck(lv.payloadCurve.value, day.c3, wet, ride.secondarySlot_kg.value, ride.primaryMass_kg.value)
+    : launchMassCheck(lv.payloadCurve.value, day.c3, wet);
+  const need = ev.details.deltaVRequired_ms - ev.details.deltaVBudget.arrival_ms + arrivalDeltaV(design.destination, day.vInfArr_ms, design.captureOrbit);
+  const dvMargin = (ev.details.deltaVCapability_ms - need) / need;
+  const worst = Math.min(launch.meter.margin, dvMargin);
+  return { quality: QUALITY[marginStatus(worst)], massMargin: launch.meter.margin, deltaVMargin: dvMargin, capacity_kg: launch.meter.limit };
+}
+
+const QUALITY_RANK: Record<DayQuality['quality'], number> = { good: 0, soso: 1, bad: 2 };
+
+/**
+ * The day the Cadet flies unless they pick one (the Launch Day step): the best quality, then the widest of the two
+ * margins (launch mass and Δv, the worse of the pair), then the day nearest `preferred` (the starter's day).
+ */
+export function bestLaunchDay(qualities: DayQuality[], preferred: number): number {
+  const worse = (q: DayQuality) => Math.min(q.massMargin ?? -Infinity, q.deltaVMargin ?? -Infinity);
+  let best = Math.min(Math.max(0, preferred), Math.max(0, qualities.length - 1));
+  qualities.forEach((q, i) => {
+    const b = qualities[best]!;
+    const better =
+      QUALITY_RANK[q.quality] - QUALITY_RANK[b.quality] || worse(b) - worse(q) || Math.abs(i - preferred) - Math.abs(best - preferred);
+    if (better < 0) best = i;
+  });
+  return best;
+}
+
+/** The design flown from a calendar day. */
+export function onDay(design: Design, day: CalendarDay): Design {
+  return { ...design, launchDate: day.date, arrivalDate: day.arrivalDate ?? day.date };
+}
+
+// ---------------------------------------------------------------------------
+// Choose the rocket (spec UI rule 58): both Atlas V rockets on every level, plus the Moon's shared ride. A level's
+// standard rocket (Design.standardRocketId) is free; another charges, or refunds, the price difference (massCost.ts).
+
+const RIDE = 'ride:';
+
+/** The rockets a destination offers: every launch vehicle, then each shared ride that goes there. */
+export function rocketOptions(destination: DestinationId): string[] {
+  return [
+    ...Object.keys(LAUNCH_VEHICLES),
+    ...Object.entries(RIDESHARES)
+      .filter(([, r]) => r.destination === destination)
+      .map(([id]) => `${RIDE}${id}`),
+  ];
+}
+
+/** The option a design flies: its shared ride, or its rocket. */
+export const rocketIdOf = (design: Design): string => (design.rideshareId ? `${RIDE}${design.rideshareId}` : design.launchVehicleId);
+
+/** The design flying an option (a shared ride rides on its own rocket). */
+export function withRocket(design: Design, option: string): Design {
+  if (!option.startsWith(RIDE)) return withLauncher(design, option);
+  const id = option.slice(RIDE.length);
+  return withRideshare(design, id, lookup(RIDESHARES, id, 'rideshare').vehicleId);
+}
+
+export interface RocketCard {
+  id: string;
+  /** A shared ride (the secondary slot of someone else's launch). */
+  ride: boolean;
+  /** Its rocket (launchVehicles.json). */
+  vehicleId: string;
+  /** What it lifts to this mission's C3 (a ride: its slot or what the rocket has left, the smaller). */
+  lift_kg: number;
+  /** It lifts this craft (wet mass ≤ lift). */
+  fits: boolean;
+  /** Launch price for this craft ($M; a ride pays a mass share) and the charge against the budget (− = refund). */
+  price_M: number;
+  charge_M: number;
+  flights: number;
+  successes: number;
+  standard: boolean;
+  picked: boolean;
+  /** The payload curve the lift comes from (for its ⓘ: today a placeholder, a game estimate). */
+  curve: Sourced<[number, number][]>;
+}
+
+/** One card per rocket on offer, read against the packed craft (evaluated: its wet mass and C3). */
+export function rocketCards(design: Design, ev: FullEvaluation): RocketCard[] {
+  const c3 = ev.trajectory.c3;
+  const wet = ev.details.wetMass_kg;
+  const standard = design.standardRocketId ? lookup(LAUNCH_VEHICLES, design.standardRocketId, 'launch vehicle') : undefined;
+  const picked = rocketIdOf(design);
+  return rocketOptions(design.destination).map((id) => {
+    const ride = id.startsWith(RIDE) ? lookup(RIDESHARES, id.slice(RIDE.length), 'rideshare') : undefined;
+    const vehicleId = ride ? ride.vehicleId : id;
+    const lv = lookup(LAUNCH_VEHICLES, vehicleId, 'launch vehicle');
+    const check = ride
+      ? rideshareMassCheck(lv.payloadCurve.value, c3, wet, ride.secondarySlot_kg.value, ride.primaryMass_kg.value)
+      : launchMassCheck(lv.payloadCurve.value, c3, wet);
+    const price_M = ride ? rideshareLaunchPrice(lv.price_M.value, wet, ride.primaryMass_kg.value) : lv.price_M.value;
+    return {
+      id,
+      ride: !!ride,
+      vehicleId,
+      lift_kg: check.meter.limit,
+      fits: wet <= check.meter.limit,
+      price_M,
+      charge_M: standard ? price_M - standard.price_M.value : 0,
+      flights: lv.flights.value,
+      successes: lv.successes.value,
+      standard: !ride && vehicleId === design.standardRocketId,
+      picked: id === picked,
+      curve: lv.payloadCurve,
+    };
+  });
+}

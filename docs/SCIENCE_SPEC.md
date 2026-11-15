@@ -1,0 +1,1158 @@
+# Signal Delay — Science Spec v1.9
+
+Oct 3, 2026
+
+v0.2 (Oct 3, 2026) added the decisions taken while building the engine. v0.3 (Oct 3, 2026) adds the UI rules. v0.4 (Oct 4, 2026) adds Mission operations (engine only). v0.5 (Oct 4, 2026) makes the Risk and Power meters come from the Mission operations model (Monte Carlo; worst day with eclipses), sizes batteries by depth of discharge, adds the Moon rideshare and copies the fact-sheet values. v0.6 (Oct 5, 2026) renames the game Signal Delay and rebuilds the UI from the Claude Design "Signal Delay" screens: Pack, Fly & Survive and the Mission Report, with one flight model (Mission operations) in both modes. v0.7 (Oct 21, 2026) states the game's vision and adds the name screen, the robot's transmissions and the final transmission. v0.8 (Oct 23, 2026) adds the vision's second line ("Keep it alive long enough to bring the science home."), Mars science targets, the image downlink, the mission album and the Mars globe, and makes science returned the main score. v0.9 (Oct 24, 2026) makes the Mars globe the hero of Science Targets: it fills the CRT, the camera goes to the target picked, the orbit shows each target's risk, and an OBSERVE order plays its trip while the panel is open. v1.0 (Oct 27, 2026) adds the Moon globe and four Moon targets: one globe for Mars and the Moon, far-side loss of signal from geometry, LRO's station-keeping, and the Moon levels in LRO's 50 km polar orbit. v1.1 (Oct 28, 2026) adds sound, the cold open and the EN / বাংলা switch. v1.2 (Oct 28, 2026) shows the data's cited texts, Rescue History and the mission map in Bangla. v1.3 (Oct 31, 2026) adds Mars mission objectives, which tie the target weights to the instruments packed, so different designs win different objectives, and Team mode: four roles, permissions, danger-card votes and one action log. v1.4 (Nov 2, 2026) adds the Online room: each player on a phone, the host screen running the engine, a managed relay, rejoin, resume codes and local co-op when the relay is down (Nov 3: the relay project is set up; heartbeats added after the first real room, decision 94). v1.5 (Nov 10, 2026) lets a solo player pick the Mars mission objective in the Red Planet briefing, shows it on Pack and says on the report whether it was met (UI rule 56, decision 95). v1.6 (Nov 10, 2026) puts the four mission limits on solo Pack and gives Cloud Diver its own budget, which blocks launch when it is exceeded (UI rule 57, decision 96). v1.7 (Nov 10, 2026) lets a solo Cadet choose the rocket on Pack, with the price difference against the level's standard rocket charged to the budget (UI rule 58, decision 97). v1.8 (Nov 10, 2026) lets a solo Cadet pick the Mars science orbit from three presets (UI rule 59, decision 98). v1.9 (Nov 11, 2026) closes the design loop: FLY AGAIN keeps the whole design, Pack compares each limit with the last flight, and the report names a part that would have helped (UI rule 60, decision 100). All decisions are applied in the sections below and listed in the **Decision log** at the end.
+
+## Vision
+
+> **Keep a robot you'll never touch alive, under the real sky, with words that arrive too late.**
+> **Keep it alive long enough to bring the science home.**
+
+Every part of the game serves that sentence:
+
+- **A robot you'll never touch.** You name it before it flies (rule 38). After launch you only ever reach it with orders that cross space, and it only ever reaches you with messages that do the same.
+- **Alive.** The danger is real mission danger: storms, eclipses, conjunctions, worn wheels, empty tanks. Every danger comes from the hazard data and the Mission operations engine, and real missions fly through the same model (rule 1 below).
+- **Under the real sky.** The planets are where JPL's elements put them today, Mars right now is today's distance (rule 36), and the Daily's storms are this week's real Sun (rule 37).
+- **Words that arrive too late.** Every order takes one light time to arrive, and every reply takes one more to come back (rule 32). Most of the game is the wait in between.
+- **Bring the science home.** Survival is the means; science is the point. At Mars the robot asks what to look at, every picture costs fuel, power or risk, and a picture only counts once it has come down a DSN pass and crossed the light time to Earth (rules 39–43). Science returned is the main score: pictures already home count even if the robot is lost later.
+
+## Purpose and model philosophy
+
+Every number the game shows must come from a published NASA source or a named physics equation. Nothing is hand-typed into the UI. The engine computes it, and the UI only displays it.
+
+The models are simplified on purpose, so a 10-year-old can play. But each simplification is the standard first-order method that mission designers use in early concept studies. Each one is also listed on the Sources & Assumptions page.
+
+Three rules for the engine:
+
+1. **One model for everyone.** The player's craft and the real missions (MAVEN, LRO, OSIRIS-REx) run through the exact same equations. If the engine cannot roughly reproduce a real mission, the model is wrong, not the mission.
+2. **Sourced inputs.** Every constant and catalogue value carries a `source` field. The UI shows it in the ⓘ popover.
+3. **Engineer mode shows the working.** Every meter can expand to show its equation and the inputs that fed it.
+
+## Constants and units
+
+The engine works in SI internally (m, s, kg, W) and converts to km, km/s and days only for display.
+
+| Constant | Symbol | Value | Unit | Source |
+| --- | --- | --- | --- | --- |
+| Standard gravity | g₀ | 9.80665 | m/s² | SI definition (exact) |
+| Astronomical unit | AU | 149,597,870.7 | km | IAU 2012 definition (exact) |
+| Speed of light | c | 299,792.458 | km/s | SI definition (exact) |
+| Solar irradiance at Earth (1 AU) | S₀ | 1361.0 | W/m² | [NASA Mars/Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html) |
+| Sun gravitational parameter | μ☉ | 1.32712 × 10¹¹ | km³/s² | Approximate; confirm on the NASA Sun Fact Sheet |
+| Earth gravitational parameter | μ⊕ | 398,600 | km³/s² | [NASA Mars/Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html) |
+| Earth equatorial radius | R⊕ | 6378.1 | km | [NASA Mars/Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html) |
+
+Display rules: speeds in m/s below 10 km/s and km/s above, mass in kg, power in W, distance in million km, light delay in minutes, cost in $M with the year stated.
+
+## Destinations
+
+Five destinations give a clear difficulty ladder: Moon (easy), Venus and Mars (medium), Bennu (rendezvous, hard), Jupiter (very hard, solar power nearly fails). Orbit and size values come from the [NASA Planetary Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/index.html); Mars values were checked on the [Mars Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html).
+
+| Destination | Distance from Sun (10⁶ km) | Orbit period (days) | Synodic period (days) | GM (km³/s²) | Equatorial radius (km) | Sunlight vs Earth | Mission type |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Moon | 149.6 (0.384 from Earth) | 27.3 around Earth | — | 4,902.8 (approx.) | 1738.1 (approx.) | 100% | Orbiter |
+| Venus | 108.2 | 224.7 | 583.9 (computed) | 324,859 (approx.) | 6051.8 (approx.) | \~191% | Orbiter |
+| Mars | 227.956 | 686.980 | 779.94 | 42,828 | 3396.2 | 43.1% | Orbiter |
+| Bennu (asteroid) | \~168 (approx.) | \~437 (approx.) | — | negligible | \~0.25 (approx.) | \~79% | Rendezvous + sample |
+| Jupiter | 778.5 | 4331 | 398.9 (computed) | 126,686,534 (approx.) | 71,492 (approx.) | \~3.7% | Orbiter |
+
+Values marked approx. still need to be copied from each body's own NASA fact sheet (Venus, Moon, Jupiter) and from the JPL Small-Body Database (Bennu) before release. Synodic period S = 1 / |1/T\_Earth − 1/T\_planet| is the time between launch windows, so Mars windows repeat every \~26 months.
+
+Mars distance from Earth ranges from 54.6 to 401.4 million km ([Mars Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)). The game must compute this from planet positions on each mission day, never show a fixed number.
+
+## Trajectory model
+
+The engine uses patched conics: the Sun's gravity alone between planets, the planet's gravity alone near it. This is the standard first-order method for concept studies, and it gives the launch energy (C3), the arrival speed (v∞) and the capture burn the spacecraft must pay for.
+
+**Planet positions.** Use the Keplerian elements and rates from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html), the table valid for 1800–2050 AD. No API call is needed, so it runs offline in the browser. Planet distance from Earth, light delay and the flight map all come from this.
+
+**Transfer (Cadet mode explanation).** A Hohmann transfer between circular orbits r₁ (Earth) and r₂ (target):
+
+```latex
+a_t = \frac{r_1 + r_2}{2}, \qquad t_{flight} = \pi \sqrt{\frac{a_t^3}{\mu_\odot}}
+```
+
+```latex
+v_{\infty,dep} = \left| \sqrt{\mu_\odot\left(\frac{2}{r_1} - \frac{1}{a_t}\right)} - \sqrt{\frac{\mu_\odot}{r_1}} \right|, \qquad C_3 = v_{\infty,dep}^2
+```
+
+```latex
+v_{\infty,arr} = \left| \sqrt{\frac{\mu_\odot}{r_2}} - \sqrt{\mu_\odot\left(\frac{2}{r_2} - \frac{1}{a_t}\right)} \right|
+```
+
+For Mars this gives about 259 days, C3 ≈ 8.7 km²/s² and arrival v∞ ≈ 2.6 km/s. These are textbook minimum-energy values; real launch years cost more because the orbits are elliptical and inclined.
+
+**Launch windows (Engineer mode and the Window screen).** Solve Lambert's problem between Earth's position on the launch date and the target's position on the arrival date. A grid of launch × arrival dates gives the porkchop plot. The Hohmann phase rule is the Cadet explanation: the target must lead Earth by
+
+```latex
+\theta = 180^\circ - n_{target} \cdot t_{flight}
+```
+
+For Mars that is about 44°, and it recurs once per synodic period (\~780 days).
+
+**Capture burn.** The launch vehicle pays for C3. The spacecraft pays for capture. Entering an orbit with periapsis rₚ and apoapsis rₐ around a body with parameter μ:
+
+```latex
+\Delta v_{cap} = \sqrt{v_{\infty,arr}^2 + \frac{2\mu}{r_p}} - \sqrt{\mu\left(\frac{2}{r_p} - \frac{2}{r_p + r_a}\right)}
+```
+
+An elliptical capture orbit costs much less than a low circular one. This is a real design trade the player should discover.
+
+**Special cases**
+
+- **Moon:** Earth-centred, not Sun-centred. The launch vehicle does trans-lunar injection; the spacecraft does lunar orbit insertion with the same capture equation (μ of the Moon).
+- **Bennu:** gravity is negligible, so rendezvous Δv ≈ arrival v∞. The real OSIRIS-REx used an Earth flyby; the game must say it does not model flybys. The player can also pick a fixed, clearly labelled **"NASA real route (Earth flyby)"** option. It uses the published launch C3 = 29.29678 km²/s² ([Lauretta et al. 2017, arXiv 1702.06981](https://arxiv.org/pdf/1702.06981)) and the published launch date. The flyby is not simulated: only the post-flyby leg (flyby → start of approach, Aug 13, 2018) is computed by Lambert, to get the arrival v∞. The deep-space manoeuvre (Dec 28, 2016) is charged to the spacecraft as Δv; its size is a game estimate.
+- **Jupiter:** a direct Hohmann transfer needs C3 ≈ 77 km²/s², which almost no launch vehicle can give a useful payload. Real missions use gravity assists. The game should show this as the reason Jupiter is "very hard", not hide it.
+
+**Transfer cap (decided).** The Lambert solver is zero-revolution only; there are no multi-revolution solutions. A direct player transfer must take less than one revolution of the minimum-energy transfer orbit:
+
+```latex
+t_{flight} < 2\,t_{Hohmann}
+```
+
+That is about 518 days to Mars and 399 days to Bennu. Longer flights are blocked with a plain-language message. Reason: a zero-revolution Lambert solution for a longer flight is still mathematically valid but physically absurd. For OSIRIS-REx's real 816-day dates it dives to 0.03 AU and needs C3 ≈ 1,755 km²/s².
+
+**Best arrival date.** For a given launch date, the engine scans arrival dates within the cap and picks the lowest departure v∞ + arrival v∞. For MAVEN's launch on Nov 18, 2013 this gives 300 days, against 307 days flown.
+
+**Best launch window (decided).** `bestLaunchWindow(dest, fromDate)` scans launch dates over one synodic period after `fromDate`. It uses a 10-day grid, then a 1-day refinement within ±10 days of the best grid point. For each launch date it takes the best arrival (above). It returns the single launch date with the lowest **departure v∞ + arrival v∞**: launch energy plus the arrival burn, with equal weight. This is a standard porkchop figure of merit. The game uses it to set starter dates.
+
+It is **not** how real missions pick their launch day. A real mission plans a *launch period*: every day on which its vehicle can deliver the C3 needed to reach a fixed arrival date. It then launches on the first day, so a slip still fits.
+- **MAVEN's case:** the published launch period was Nov 18 – Dec 7, 2013, with orbit insertion planned for Sept 22, 2014 ([NASA: The 2013 MAVEN Mission To Mars](https://mars.nasa.gov/files/resources/MAVENPresentation2013.pdf)). MAVEN launched on the opening day.
+- **The model's optimum:** from June 2013 the search returns **Dec 6, 2013** (C3 ≈ 9.4 km²/s²), inside the published period, near its close. The opening day to the planned arrival needs C3 ≈ 12.2 km²/s² in the model.
+
+So Nov 18 is where the period opens, not where the energy is lowest. The validation table checks that the optimum lies inside the published period. Launch periods, launch-vehicle C3 limits, the declination of the launch asymptote and arrival-date constraints are not modelled. A future Window screen can show a launch period as the days on which the chosen vehicle meets the needed C3 for the player's wet mass.
+
+**Orbits are altitudes.** Capture and science orbits are given as periapsis and apoapsis **altitudes** above the equatorial radius. When only a period is published, the apoapsis is derived by Kepler's third law: a = (μT²/4π²)^{1/3}.
+
+**Science-orbit transfer.** If the science orbit differs from the capture orbit, the spacecraft pays a two-burn transfer with each burn at an apsis (vis-viva, cheaper of the two burn orders):
+
+```latex
+v = \sqrt{\mu\left(\frac{2}{r} - \frac{2}{r_p + r_a}\right)}
+```
+
+## Propulsion
+
+The spacecraft's Δv capability comes from one equation, applied to every craft including the real ones. This fixes the mockup bug where the player and MAVEN were scored on different numbers.
+
+```latex
+\Delta v = I_{sp} \, g_0 \, \ln\left(\frac{m_{wet}}{m_{dry}}\right), \qquad m_{prop} = m_{dry}\left(e^{\Delta v / (I_{sp} g_0)} - 1\right)
+```
+
+The second form answers the Debrief hint "carry X kg more propellant" exactly.
+
+| Engine type | Isp (s) | Thrust class | Game rule |
+| --- | --- | --- | --- |
+| Hydrazine monopropellant | \~220–230 | Low–medium | Simple, reliable, default choice |
+| Bipropellant (MMH/NTO) | \~310–320 | Medium–high | Less propellant, higher cost and more failure points |
+| Solar-electric ion (xenon) | \~3000 | Very low | Cruise and rendezvous only; cannot do a fast capture burn; needs high power |
+
+Isp values are typical textbook ranges, not from a single sourced datasheet yet. Before release, replace each with a named flight engine and its published Isp.
+
+**Propellant tanks.** Tank and feed-system dry mass = 12% of propellant mass (game approximation, shown in the Assumptions page).
+
+**Δv budget.** Required Δv = capture burn + capture→science orbit transfer + trajectory corrections (fixed 50 m/s) + orbit maintenance over the planned science phase + lifetime reserve + any fixed-route manoeuvre.
+
+- Orbit maintenance is 20 m/s per year (game estimate).
+- Lifetime reserve = maintenance rate × (planned lifetime − planned science days). It is zero when no extended mission is planned at launch.
+- Real-mission presets use the **planned** prime mission, not the as-flown lifetime.
+
+Margin = (capability − required) / required. Below 10% margin, the craft gets a warning; below 0%, it cannot launch.
+
+**Check with MAVEN.** NASA lists MAVEN at 809 kg dry and 2,454 kg wet, fuelled with hydrazine ([NASA Science: MAVEN](https://science.nasa.gov/mission/maven/)). That is 1,645 kg of propellant. At Isp 220–230 s, the equation gives roughly 2.4–2.5 km/s of Δv. The engine must show this number for MAVEN, not a hand-typed one.
+
+## Launch vehicles
+
+A launch vehicle is a curve, not a single number: the higher the launch energy (C3) the mission needs, the less mass the rocket can send. The game reads payload capacity off that curve at the mission's C3.
+
+**Data source.** NASA's [Launch Services Program performance site](https://elvperf.ksc.nasa.gov/) publishes payload-vs-C3 curves for the vehicles on NASA's launch contract. NASA notes that its contract performance can differ from what providers advertise, so the game should say "NASA LSP performance" in the ⓘ popover. The site is an interactive query tool, so the data person must export 6–8 points per vehicle (C3 from −2 to 40 km²/s²) into `launchVehicles.json`.
+
+**Model.** Piecewise-linear interpolation between the exported points:
+
+```latex
+m_{max}(C_3) = m_i + (m_{i+1} - m_i)\frac{C_3 - C_{3,i}}{C_{3,i+1} - C_{3,i}}
+```
+
+Mass margin = (m\_max − m\_wet) / m\_max. Over capacity blocks launch with a message such as "Too heavy by 120 kg for this rocket at C3 = 12".
+
+**Reliability.** Launch success probability uses the vehicle's flight record with a Laplace estimate, so a rocket with few flights is not shown as 100% safe:
+
+```latex
+p_{success} = \frac{successes + 1}{flights + 2}
+```
+
+**Validation anchor.** MAVEN (2,454 kg wet) launched on an Atlas V 401 to Mars in November 2013 ([NASA Science: MAVEN](https://science.nasa.gov/mission/maven/)). The Atlas V 401 curve at the 2013 Mars C3 must be at or above 2,454 kg, or the curve data is wrong.
+
+Still to collect: launch price per vehicle, from NASA Announcement of Opportunity documents rather than news articles.
+
+**Rideshare (v0.5).** A craft can fly as the secondary payload of a real shared launch (`rideshares.json`). No smaller rocket is invented: the ride is the real rocket, with a real primary payload on board.
+- **Moon: LRO, 2009.** LCROSS flew as the secondary payload on LRO's Atlas V 401 (AV-020), launched June 18, 2009 ([NASA Science: LCROSS](https://science.nasa.gov/mission/lcross/)). NASA's call for that secondary mission said it "could weigh no more than 1000 kg (fuelled)" ([D. Andrews, LCROSS project manager, NTRS 20100028203](https://ntrs.nasa.gov/citations/20100028203)). LRO's mass is 1,850 kg ([NASA Science: LRO](https://science.nasa.gov/mission/lro/about/)).
+- **Mass limit:** m_max = min(secondary slot, m_LV(C3) − m_primary). The mass margin is measured against the slot.
+- **Price (game rule, labelled):** the secondary pays a mass-proportional share of the rocket, price × m_wet / (m_wet + m_primary). Launch is paid outside the cost cap, as before, so a shared ride lowers the total mission cost, not the development cost.
+- The ride only goes where its primary went. On any other destination it is a blocker.
+- **Why it matters:** a small Moon craft on a whole Atlas V uses under 20% of its lift, so its mass margin (82–87%) can never be in the 10–30% band, and the Moon's third star was out of reach (before v0.8, when the third star still needed every margin in band; it now shows in the mass score). In the 1000 kg slot the Cadet crafts sit at 16–41%, and four of the nine science × fuel cards are in the band (validation info row).
+
+## Power
+
+Solar power falls with the square of distance from the Sun. With one calibrated efficiency number, this single equation reproduces MAVEN's published power range to within 2%.
+
+```latex
+P_{solar} = S_0 \left(\frac{1\,\text{AU}}{r}\right)^2 A \, \eta_{sys} \, \cos\theta \, (1 - d)^{t}
+```
+
+S₀ = 1361 W/m², r = distance from the Sun on that mission day (from the ephemeris), A = array area, η\_sys = end-to-end system efficiency, θ = Sun angle (0 when pointed), d = yearly degradation, t = years since launch.
+
+**Calibration from MAVEN.** NASA lists MAVEN's 12 m² of arrays as producing 1,150 to 1,700 W depending on position in Mars orbit ([NASA Science: MAVEN](https://science.nasa.gov/mission/maven/)). Mars ranges from 206.65 to 249.26 million km from the Sun ([Mars Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)), so sunlight ranges from about 713 to 490 W/m². Both ends give η\_sys ≈ 0.20 (0.199 at perihelion, 0.196 at aphelion). Use η\_sys = 0.20 for the default solar array.
+
+**RTG option.** NASA's [MMRTG fact sheet](https://science.nasa.gov/wp-content/uploads/2024/02/mmrtg-factsheet-updated-5-18-20-1.pdf) gives about 110 W at launch and about 45 kg. Power does not depend on the Sun, so it is the only real option for Jupiter and beyond. In-game it is expensive, scarce, and adds a launch-approval step.
+
+**Power budget.** Required power = bus + engine + comms transmit + heaters every day, plus the instruments in the science phase (Mission operations' default plan). Heater power rises as sunlight falls (game approximation). Margin = (available − required) / required.
+
+**The Power meter shows the worst day (v0.5).** The engine computes power on every day from launch to the end of the prime mission. It uses the craft's own distance from the Sun (along the transfer in cruise) and the Mission operations equation, eclipses included (see "Mission operations › Power"):
+
+- P_avail = min(P_gen(1 − f_ecl), E_batt/t_ecl) for solar; P_RTG for RTGs.
+- f_ecl and t_ecl come from the science orbit fixed in inertial space (see "Eclipse seasons").
+
+The meter shows the day with the lowest margin, and its ⓘ names that day. Mission operations reads the same days, so the meter and Ops are one model (`powerProfile.ts`). Before v0.5 the meter read only the arrival day in sunlight, so a design could look healthy and still shed load in an eclipse season. The arrival-day sunlit figure is still reported (`details.power.available_W`), because that is the number compared with real missions. The end-of-mission power margin used for scoring is the last science day, eclipse included.
+
+**Batteries.** Must cover the longest eclipse in the science orbit (worst case: cylindrical shadow centred on apoapsis) at the heaviest science-day load, using at most the maximum depth of discharge (DoD):
+
+- E_batt = t_ecl,max · P_load / DoD_max;
+- battery mass = E_batt / specific energy (game value for Li-ion, to be sourced).
+
+DoD_max = 30% is a game estimate, to verify against a mission battery design. It is chosen from JPL D-101146, *Energy Storage Technologies for Future Planetary Science Missions* (Dec. 2017): Li-ion gives more than 30,000 cycles at 30% DoD, and a low orbiter sees thousands of eclipses a year. Because the battery keeps this reserve, the battery term never limits P_avail, and the worst day is set by the sunlight lost to the shadow. Known consequence: an orbit with very long worst-case eclipses (the default Jupiter orbit) needs a very heavy battery.
+
+## Communications
+
+Data rate falls with the square of distance, so the same craft sends much less data from Mars at its farthest than at its closest. The game uses a scaled link budget: the physics of the full link equation, anchored to one real, published spacecraft link.
+
+```latex
+R = R_{ref} \cdot \frac{P_t}{P_{t,ref}} \cdot \left(\frac{D_{sc}}{D_{sc,ref}}\right)^2 \cdot \left(\frac{D_{gs}}{D_{gs,ref}}\right)^2 \cdot \left(\frac{d_{ref}}{d}\right)^2
+```
+
+Pₜ = transmitter power, D\_sc = spacecraft dish diameter, D\_gs = ground dish diameter (Deep Space Network 34 m or 70 m), d = Earth–craft distance that day. Antenna gain scales with diameter squared, which is why each dish appears squared. Frequency band and coding are held equal to the reference link.
+
+**Reference link.** Pick one mission whose data rate, distance, transmitter power and both antenna sizes are all published, ideally from JPL's DESCANSO telecom summaries. Ground station parameters come from the [DSN Telecommunications Link Design Handbook (810-005)](https://deepspace.jpl.nasa.gov/dsndocs/810-005/), which NASA tells proposers to use when designing spacecraft radios ([DSN mission documents](https://deepspace.jpl.nasa.gov/about/commitments-office/mission-documents/)). Until that anchor is filled in, the Comms meter must show "uncalibrated" in Engineer mode.
+
+**Reference link (decided): MRO.** [DESCANSO Article 12, Mars Reconnaissance Orbiter Telecommunications](https://descanso.jpl.nasa.gov/DPSummary/MRO_092106.pdf) (JPL, 2006) gives MRO's X-band design point: "at a maximum distance from Earth (400 million km) … at least 500 kbps", with a 100 W X-band TWTA and a 3 m high-gain antenna.
+- The article does not name the ground station for that figure. **34 m is inferred**: MRO schedules two 34-m stations daily, and a 34-m link budget built from the 810-005 gains is consistent with 500 kbps. That one anchor value stays a labelled game estimate, and the Data meter's limit badge points to it.
+- The ground term is the ratio of the 810-005 X-band receive gains, not (D_gs/D_gs,ref)²: 74.55 dBi for the 70 m (DSS-14, module 101 Rev. I, Table 2) against 68.24 dBi for the 34 m BWG (DSS-24, module 104 Rev. Q, Table 6). That is 6.31 dB, or 4.28×, close to the (70/34)² = 4.24 the diameter rule gives.
+- **Known limit:** inverse-square scaling of the 400-million-km anchor predicts 8 Mbps at 100 million km on a 34 m. MRO's article cites 3–4 Mbps there ("as high as 6 Mbps"), because its coding and ground decoders cap the rate (turbo decoding ≤ 1.6 Mbps). The game does not model those caps, so close-range rates are optimistic. The validation table shows this as an info row.
+
+**Data per day.** Volume = R × DSN pass length. Default one 8-hour pass per day; a 70 m pass costs more but gives about (70/34)² ≈ 4.2× the rate.
+
+**Light delay.** t = d / c. For Mars this ranges from about 3.0 to 22.3 minutes (54.6 to 401.4 million km, [Mars Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)). This is shown on the Flight screen and is why crisis decisions cannot be made in real time.
+
+**Science return link.** Science data produced per day is capped by data downlinked per day. The Debrief must say when the radio, not the instruments, limited the science.
+
+**Downlink caps science (decided).** The science **goal** is Σ instrument data/day × planned science days. It does not depend on the radio. The data actually **sent home** does: on each science day the engine adds min(data produced, downlink capacity that day), with the capacity taken from the scaled link budget at that day's Earth distance. The Science return score (downlinked ÷ goal) and the "radio-limited" note therefore rest on the comms reference link. That link is now MRO's published design point, but its ground station is inferred, so the Debrief still marks the downlink figures and the Science return row "rests on an estimate", and the Data meter's limit carries the same badge. The badges go when a published link that names its station replaces the anchor.
+
+## Mass and cost
+
+The budget cap must come from a real NASA mission class, never from one mission's actual cost. This fixes the mockup problem where the cap equalled MAVEN's cost and looked rigged.
+
+**Mass model.**
+
+```latex
+m_{dry} = (1 + k_{margin}) \left( m_{bus} + \sum m_{instruments} + m_{power} + m_{comms} + m_{tanks} \right)
+```
+
+```latex
+m_{wet} = m_{dry} + m_{prop}
+```
+
+k\_margin = 0.30 at concept stage (game rule, shown in Assumptions). Players learn that early designs carry mass reserves for growth.
+
+**Cost caps by mission class.** NASA caps competed planetary missions on development cost (Phases A–D), with launch and operations counted separately. The game uses the same convention.
+
+| Mission class | Cap | What it excludes | Source |
+| --- | --- | --- | --- |
+| Discovery | $500M (FY2019) | Launch vehicle, operations (Phases E–F), contributions | [NASA Discovery 2019 AO overview](https://discovery.larc.nasa.gov/PDF_FILES/03a_Brown_Overview.pdf) |
+| New Frontiers | \~$850M | Launch and operations | [SpaceNews on New Frontiers 4 AO](https://spacenews.com/?p=64699) (replace with the NASA AO itself) |
+
+Cadet mode shows one total budget bar. Engineer mode splits it into development (vs cap), launch and operations.
+
+**Part costs.** Each catalogue part carries a cost. Until sourced, they are game values tagged "estimate" in the ⓘ popover. Candidate sources to check: NASA's Cost Estimating Handbook and NASA instrument cost models.
+
+**MAVEN cost.** Published figures differ by what they include (for example, build + launch + prime operations). The Debrief should compare MAVEN on mass, power and Δv only, unless a NASA figure on the same accounting basis is found. Note that MAVEN was a Mars Scout mission, not Discovery.
+
+## Risk model and crisis cards
+
+Risk is computed, not rolled blindly: each phase has a failure probability that the player's own margins push up or down. Crisis cards are based on real NASA missions, which is the game's main novelty.
+
+**Phase risk.**
+
+```latex
+p_{fail,phase} = p_{base,phase} \cdot \prod_i f_i(\text{margin}_i)
+```
+
+fᵢ = 1 at the recommended margin, rising as a margin shrinks (for example, Δv margin below 10% raises capture-burn risk). Launch uses the vehicle's p\_success from the Launch vehicles section. Other base rates are game values and are labelled as such.
+
+**Decided values (game estimates, labelled):**
+- **Margin factor:** f(m) = 1 for m ≥ 10%, rising linearly to 3 at 0%. Below 0% the phase fails for certain.
+- **Which margins feed which phase:** cruise ← power; arrival (capture or rendezvous) ← Δv; science ← power; sample return ← Δv.
+- **Base rates:** cruise 2%, arrival 4%, science 2% per year, sample return 3%.
+- **Single-card flight:** `simulateMission` (the Cadet Flight and the Engineer crisis card) flies these phase risks. Their product 1 − Π(1 − p_phase) is reported only as the flight model's own loss chance.
+- **Risk meter (v0.5): the Mission operations Monte Carlo, not a formula.** The engine flies the design through the day-by-day Ops simulation N = 500 times (seed 2013). It always takes the safest response and ends at the prime mission, both game rules. The meter shows the share of runs whose prime mission was lost, against an acceptable mission risk of 20%.
+  - The run count, seed, lost runs and standard error √(p(1 − p)/N) are inputs of the meter and are shown on screen.
+  - A design that cannot launch is lost in every run.
+  - Run i always uses the same seed, so the result does not depend on how the runs are batched.
+  - The UI flies the runs in a Web Worker and fills the meter in as they come; its status appears only when every run is in.
+  - Hazard rates are **not** tuned to match the old phase formula. The validation table reports both as an info row: for MAVEN, 4.0% ± 0.9 (Ops) against 12.1% (phase formula).
+  - The 20% limit is a **game estimate**. No NASA source giving a single numeric acceptable-loss probability for robotic science missions was found; NASA's payload risk classes are qualitative.
+  - The meter shows a "game estimate" badge next to its limit, and ⓘ opens the record.
+
+**Why there is no Reliability meter (decided).** The Build Bay mockup showed "Reliability ≥ 85%" as R = Π Rᵢ over 14 subsystems. The game uses the Risk meter in that slot instead, for three reasons:
+1. **No sourced data.** A series-reliability product needs a sourced reliability Rᵢ for every part. The catalogue has none, so the 85% target and every Rᵢ would be invented numbers.
+2. **One model.** The Risk meter is the Mission operations simulation itself (v0.5). A separate reliability number would disagree with what then happens in flight.
+3. **It teaches the trade.** Risk responds to the player's margins: thin Δv raises the insertion anomaly chance, and thin power means shed loads, cold days and brownouts in Ops. So cutting a margin visibly raises the risk.
+
+If sourced part reliabilities are added later, they belong in p_base for each phase, not in a second meter.
+
+**Monte Carlo in Engineer mode.** Run the mission 1,000 times with the same design and show the success rate. This teaches that a good design lowers risk but never removes it. The run is seeded (default seed 2013, shown on screen), so the same design always gives the same result: a live demo is reproducible. Single flights from Build Bay use a fresh random seed each launch, shown on the crisis card and the Debrief. Opening the game with `?seed=N` fixes every flight to seed N (retries included), so one flight also replays identically; the Debrief links to `?seed=` for the flight just flown.
+
+**Crisis cards (first set).** One card per flight, drawn from those that fit the mission phase.
+
+| Card | Phase | Real event | Player decision | Margin that matters |
+| --- | --- | --- | --- | --- |
+| Unit mismatch | Cruise | Mars Climate Orbiter, 1999: one team used imperial units, the other metric; the craft flew too low and was lost | Spend propellant on an extra navigation check, or trust the plan | Δv |
+| Upside-down sensor | Return/landing | Genesis, 2004: deceleration sensors were installed backwards; the parachute never opened | Pay for an extra test before launch, or skip it | Budget |
+| False touchdown | Landing | Mars Polar Lander, 1999: likely shut its engine early after reading leg vibration as touchdown | Not used for orbiters; for future lander missions | — |
+| Memory full | Science ops | Spirit rover, 2004: too many files filled flash memory and caused reboots; fixed from Earth | Pause science to fix, or keep going at risk | Data |
+| Lost attitude | Cruise | SOHO, 1998: lost attitude control and contact; recovered months later | Spend propellant and power to recover now, or wait | Power, Δv |
+| Solar storm | Any | Solar particle events can trigger spacecraft safe mode | Raise orbit (costs propellant) or ride it out (risk to instruments) | Power, Δv |
+
+These are summaries from general knowledge. Before release, each card's text must be checked against NASA's [Lessons Learned Information System](https://llis.nasa.gov/) or the mission's official failure report, and the link goes on the card's "Real history" box.
+
+**Timeline rule.** A card's day number must fall inside its phase. A Mars transfer takes about 8–10 months, so a day-214 event is a cruise event, not an orbit event.
+
+**Crisis simplification (decided).**
+- Each option has costs (Δv, budget, science days, or a minimum power margin) and a failure chance (game estimates). An option the player's spare margins cannot pay for is not offered; the free option is always there.
+- A bad outcome ends the phase that option affects.
+- Costs apply only if the crisis is reached, except a test bought before launch (Genesis card), which is always paid.
+- Crisis handling score: safe choice and fine 100 · risky and fine 70 · safe and unlucky 50 · risky and lost 0.
+
+## Mission operations
+
+Mission Operations is where the player **manages** the mission they designed, and the engine **simulates** it day by day. It is a separate entry point (`src/engine/ops/`); Engineer mode and the Cadet flight keep the single-card model above.
+
+**Decided (v0.4):**
+- Ops replaces the generic cruise and science base rates with explicit hazards, so no failure is counted twice. Launch keeps the vehicle's Laplace reliability. The orbit-insertion anomaly reuses `BASE_RISK.arrival × f(Δv margin)`. Since v0.5 the Risk meter *is* the Ops Monte Carlo; an info row compares it with the single-card flight's phase formula.
+- A mission extension is reported separately. The 0–100 score and the stars stay on the prime mission, so losing the craft in an extension never removes prime-mission credit.
+
+### Mission clock
+
+The clock counts days from launch (day 0), through cruise, arrival, science and (for sample return) the trip home, then any extension. It moves in whole days, but every event has an exact time in fractional days. A command takes effect at its exact arrival time, so a day is split into segments and power and data are counted segment by segment. Nothing the player does is instant.
+
+**Daily ledger.** Each day records:
+- power available and required, and the load fault protection had to shed;
+- data produced, downlinked, held in the recorder, and lost;
+- Δv and propellant spent, from the rocket equation at the craft's mass at that moment;
+- budget spent;
+- radiation dose.
+
+**Determinism.**
+- The mission is a function of (design, seed, command log), so a save or a replay only needs the seed and the commands.
+- Every hazard type has its own random stream: the seed mixed with an FNV-1a hash of the hazard name, fed to the same mulberry32 generator as the Monte Carlo.
+- All candidate times and outcome draws are made at the start. A player decision changes the odds of what comes next but never reshuffles the future (the same random numbers whatever the player does).
+
+### Power
+
+```latex
+P_{avail} = \min\left(P_{gen}(1 - f_{ecl}),\; \frac{E_{batt}}{t_{ecl,max}}\right) \quad (\text{solar}), \qquad P_{avail} = P_{RTG} \quad (\text{RTG})
+```
+
+- P_gen is the Power section's equation on that day (Sun distance from the ephemeris, degradation since launch).
+- f_ecl is the fraction of the day in eclipse.
+- E_batt is the battery energy from the existing sizing. The second term is the most the battery can carry through that day's longest eclipse.
+
+**Loads:**
+- the bus and engine (always);
+- heaters (a fraction of the `heaterPower` need);
+- each instrument at a duty cycle from 0 to 1 (science phase only);
+- the radio at its full DC draw while it is on.
+
+The default plan therefore needs exactly what the Power meter needs.
+
+**Fault protection** sheds load on board, at once, in this order: instruments, then radio, then heaters. The bus is never shed. A day that cannot power the bus is a brownout day, and three in a row lose the craft (game estimate). A day with heaters below their need is a cold day, and it multiplies the hardware hazard rates by k_cold (game estimate).
+
+### Data and the DSN
+
+- Science data is produced only in the science phase, at Σ duty × instrument data/day.
+- Each day's downlink capacity is the Communications link at that day's Earth distance, times the booked pass hours. It is zero during a solar conjunction or while the radio is off.
+- Data waits in an on-board recorder. Data beyond the recorder size (game estimate, 160 Gbit after MRO, to verify) is lost.
+- The pass is spread evenly over the day, so a command that arrives part-way through a day changes that day's downlink in proportion.
+
+**DSN cost.** The [DSN aperture fee](https://deepspace.jpl.nasa.gov/files/6_NASA_MOCS_2014_10_01_14.pdf) is
+
+```latex
+AF = R_B\left[A_W\left(0.9 + \frac{F_C}{10}\right)\right]
+```
+
+- R_B = $1,057/h (FY09).
+- A_W = 1 for a 34 m station and 4 for a 70 m station.
+- F_C = 7 contacts per week (one pass a day).
+- Each pass also pays 1 h of set-up and tear-down.
+- The default daily pass is already inside the operations cost. The player pays only for hours and aperture above it.
+- The FY09 rate is not inflated to the FY2019 cap year (stated).
+- A booking must be made a lead time ahead (7 days, game estimate). It is ground-side, so it needs no light-time trip.
+
+### Propellant
+
+The planned Δv budget (Propulsion section) is spent on the day each part happens:
+- trajectory corrections in four equal burns at fixed fractions of cruise (game estimate);
+- the Bennu deep-space manoeuvre on its route date;
+- the arrival burn and the capture → science orbit change on the arrival day;
+- orbit maintenance on each science and extension day; in a low lunar orbit, a pair of trim burns every sidereal period instead (Moon orbit).
+
+Responses to hazards are extra burns. Because Δv adds up across burns, with no hazards the prime mission ends with exactly capability − (required − lifetime reserve) left. A planned burn the remaining propellant cannot make loses the craft.
+
+### Budget
+
+The spare budget = (cost cap − development) + planned operations − spent. This is the same reserve convention as the crisis cards. Operations cost accrues daily; DSN extras and response costs are added when they happen.
+
+### Events known in advance
+
+**Solar conjunction.** The Sun–Earth–probe angle on each day:
+
+```latex
+\cos\varepsilon = \frac{(-\mathbf{r}_E)\cdot(\mathbf{r}_c - \mathbf{r}_E)}{|\mathbf{r}_E|\,|\mathbf{r}_c - \mathbf{r}_E|}
+```
+
+- r_E and r_c are the heliocentric positions of Earth and the craft (`craftPosition` in cruise, the destination's ephemeris position after arrival).
+- While ε < 2°, NASA stops commanding Mars spacecraft ([JPL, 2015: "the sun will be within two degrees of Mars in Earth's sky"](https://www.jpl.nasa.gov/news/mars-missions-to-pause-commanding-in-june-due-to-sun/)). The game also stops the downlink, so data waits in the recorder.
+- Hand check: near conjunction ε ≈ r_M/(r_E + r_M) · φ, where φ is the heliocentric angle off the Sun line, and φ̇ = n_E − n_M ≈ 0.462°/day. So ε̇ ≈ 0.28°/day and a 2° window lasts about 14 days, as NASA's ~2-week moratoria do.
+- The Moon has no conjunction: the ephemeris has no real lunar position.
+
+**Eclipse seasons.**
+- The science orbit is fixed in inertial space (no J2 precession, stated). Its inclination, node and argument of periapsis are measured from the planet's equator: the IAU node at α₀ + 90° on the J2000 equator. They are rotated into the ecliptic with ε₀ = 23.43928°.
+- Each day the engine finds when the craft is inside the cylindrical shadow, with the Sun direction ŝ = −r_planet/|r_planet|. Entry and exit are refined by bisection in mean anomaly, which gives the eclipse fraction and the longest single eclipse.
+- A season is a run of days with eclipse. With the Sun in the orbit plane and the shadow centred on apoapsis, this reproduces the Power section's worst-case eclipse.
+- Defaults are a polar orbit (game estimate). MAVEN's preset uses its published 75° ([Wood, DESCANSO / AAS 21-211](https://descanso.jpl.nasa.gov/evolution/AAS%2021-211.pdf)).
+
+**Jupiter radiation.**
+
+```latex
+\dot D(r) = \dot D_{ref}\left(\frac{r_{ref}}{r}\right)^{k} \quad (r < r_{belt}), \qquad 0 \text{ outside}
+```
+
+- The dose rate is averaged over the orbit each day and adds up against an electronics tolerance behind the vault.
+- The forecast gives the days on which the dose reaches 50%, 75% and 100% of the tolerance.
+- Beyond 100%, a daily loss rate applies.
+- Every value is a game estimate, to verify against Juno's radiation-vault design. Other destinations get no dose; solar storms carry their own risk.
+
+### Hazards drawn from rates
+
+Each hazard is a non-homogeneous Poisson process λ(t, state). It is drawn by thinning: candidates come at a bound rate λ̄, and a candidate becomes a hazard if u < λ(t, state)/λ̄, judged when Earth would learn of it. Every rate is a `Sourced` value. Rates without a source are game estimates.
+
+| Hazard | Rate model | Source of the rate |
+| --- | --- | --- |
+| Solar storm | λ = (λ_min + (λ_max − λ_min)·A(t))·(1 AU/r)². A(t) rises as (1 − cos)/2 from a cycle minimum (0) to its maximum (1), then falls back to the next minimum. The cycle mean of λ is the NOAA S3 + S4 count. | [NOAA Space Weather Scales](https://www.spaceweather.gov/noaa-scales-explanation): S3 10 and S4 3 per 11-year cycle. Cycle 24: minimum Dec 2008, maximum Apr 2014. Cycle 25: minimum Dec 2019, maximum Oct 2024 ([NASA/NOAA](https://science.nasa.gov/science-research/heliophysics/nasa-noaa-sun-reaches-maximum-phase-in-11-year-solar-cycle/)). Other cycles repeat every 11 years. λ_min/λ_max and the exponent are game estimates. |
+| Mars global dust storm | Constant inside the Ls 180–360° season (southern spring and summer), zero outside, averaging one per 3 Mars years. Ls is computed from the IAU pole and the ephemeris, so "more likely near perihelion" (Ls ≈ 251°) follows. | ["Once every three Mars years … on average"](https://www.nasa.gov/solar-system/the-fact-and-fiction-of-martian-dust-storms/). The season bounds are to verify. |
+| Debris or comet | A constant, rare rate at the destination. Earth sees it coming a long time ahead. | Game estimate |
+| Reaction wheel | Weibull per wheel, h(t) = (β/η)(t/η)^(β−1) with β > 1, times the wheels still working. 4 wheels are fitted and 3 are needed. | Game estimate |
+| Memory corruption | λ = λ₀ (1 + k_storm · [solar storm active]) (1 + k_rad · Ḋ/Ḋ_ref) | Game estimate |
+| Orbit-insertion anomaly | On the arrival day, if u < `BASE_RISK.arrival` × f(Δv margin left at arrival) | The Risk model's game values |
+
+In a live Daily (UI rule 37) solar radiation storms are not thinned from this rate: the past week's real DONKI SEP events are replayed across the flight instead, and CMEs that NASA's WSA-ENLIL model predicts at Mars become CME shocks (a hazard with no seeded rate). The other hazards are drawn as above.
+
+### Commands and light time
+
+```latex
+t_{arrive} = t_{send} + \frac{d(t_{send})}{c}
+```
+
+- d is the Earth–craft distance when the command is sent (the light-time equation is not iterated; the craft moves very little in minutes).
+- **When Earth learns of a hazard:**
+  - one that the craft detects reaches Earth at t_onset + d/c;
+  - one that Earth sees first (solar observatories, comet surveys) is known a lead time *before* onset.
+- A response cannot be sent before the team has reacted (game estimate, 4 h).
+- Every hazard has a deadline. If no response has reached the craft by then, the craft follows its standing order if one is set and affordable; otherwise it does its fault-protection default, the free option.
+- No command can be sent during a conjunction moratorium; the receipt names the first day it can be.
+- At the Moon an order that would reach the craft while it is behind the Moon waits and arrives at the next acquisition of signal (Moon orbit).
+
+### Responses
+
+- Each hazard offers 2–3 responses. Each costs Δv (propellant), power (a minimum power margin that day), data (science days paused) or budget. Each has a failure chance and a failure effect: the craft, an instrument, the stored data, or a spell in safe mode.
+- Only the responses the remaining margins can pay for are offered. The free option is always offered.
+- A response is checked again when it reaches the craft. If it can no longer be paid for, the default runs instead.
+- Each outcome uses a number drawn at the start. Costs, failure chances and effects are game estimates.
+- **Real history.** Each hazard has a real-history text marked "to verify against NASA source" until it is checked.
+
+### Mission extension
+
+When the prime science phase ends (orbiters only), the mission pauses for a decision: end it, or extend by 1 year or by one NASA Senior Review cycle (3 years, to verify).
+
+**An option is offered only if all of these hold:**
+- the maintenance Δv for the extension fits the Δv left;
+- the power margin at the end of the extension is ≥ 0;
+- at Jupiter, the projected dose stays below the tolerance;
+- attitude control is still working;
+- the prime science return is at least the approval threshold (game estimate). This stands in for the Senior Review's science judgement.
+
+Extensions are paid with new money, so they do not draw on the prime budget. The extension's report gives the days flown, the data sent home, its cost and how it ended.
+
+### Debrief
+
+The prime mission is scored with the Scoring section's weights and band rules:
+- **science:** at Mars and on Moon 3, the weights of the targets whose pictures came home by the end of the prime mission; elsewhere, data downlinked by then against the goal;
+- **mission success:** phases completed;
+- **budget:** development plus any operations overspend;
+- **Δv margin:** after response burns;
+- **power margin:** the worst day of the prime mission, eclipse included (the Power meter, v0.5);
+- **mass margin:** as at launch;
+- **crisis handling:** the mean `crisisScore` over the hazards answered (100 when none came).
+
+Messages from Ops are codes with values, never English sentences with numbers, so the UI can translate them later.
+
+### Science targets and downlink (Mars, v0.8)
+
+At Mars the science phase is a choice of targets (`targets.json`): **Olympus Mons, Valles Marineris, the North Polar Cap, Phobos, Deimos and Thin Air at the Limb**. Each has a location, a one-line "what we learn", a science weight wᵢ (game estimate; Σ wᵢ = 1), what its picture needs (ground resolution, image size, dust) and one real NASA image, Sourced with its Photojournal id, credit line and usage terms. The Moon 3 level has its own four targets (Moon orbit, v1.0); Moon 1 and Moon 2, Venus and Bennu keep data-downlinked science until they have target lists.
+
+**Ordering a picture.** OBSERVE is a command (`{kind: 'observe', target}`) on the existing light-delayed path: it is refused in a conjunction, arrives one light time later, and is replayed from the action log like every other order. It does not hold the clock. When it arrives the engine works out the cost from the physics below, charges it, and takes the picture on the next suitable pass. A target can be ordered once; an order the craft can no longer pay for when it arrives is refused by the robot (`observe-refused`) and costs nothing.
+
+**What a picture costs.** The camera's angular resolution (IFOV) is Sourced; the altitude a target needs is h_need = resolution ÷ IFOV.
+- **Surface targets** are shot at periapsis. If the periapsis is above h_need, the robot lowers it to h_need for the observing passes and raises it again: Δv = 2 × the vis-viva orbit change (`orbitChangeDeltaV`). A target poleward of the ground track's highest latitude (the inclination) is seen at a slant: the range from the track's highest point is s = √(R² + (R + h)² − 2R(R + h) cos Δ), with Δ the latitude gap, and h_need applies to s.
+- **Lower is draggier.** Mars' upper atmosphere is exponential, ρ(h) = ρ_ref · exp(−(h − h_ref)/H), fitted to MAVEN's published periapsis densities (nominal near 150 km, the deep-dip corridor near 125 km; game estimate, to verify). Each periapsis pass costs Δv_drag = (C_D A / 2m) · ρ_p · v_p · √(2π r_p H), with v_p from vis-viva, A the solar array plus the bus face and C_D = 2.2 (game estimate). The same ρ_p sets the drag-heating hazard (below).
+- **Dust costs power.** Imaging energy = camera power × imaging time. A dusty target needs repeat passes (game estimate), more inside the Mars dust season (the existing Ls window). The energy is an extra load on the observing day, so it shows in that day's power margin and can cause a brownout like any other load.
+- **Phobos and Deimos** need an orbit change: the apoapsis moves to the moon's orbital radius and back (2 × `orbitChangeDeltaV`; no plane change, stated). The moons' radii come from the NASA Mars moons fact sheet.
+- **The limb** needs a deep dip (MAVEN precedent): the periapsis is lowered to the deep-dip altitude for the dip's days and raised again, paying vis-viva both ways plus drag on every pass, with the highest heating risk.
+
+**Risk.** Low passes and deep dips raise the rate of a drag-heating hazard (`hazards.json`) in proportion to ρ_p / ρ_ref while the observation lasts. It is drawn like every hazard (its own seeded stream, Poisson thinning), so an OBSERVE changes the odds but never reshuffles the future. Running out of propellant on an observing burn loses the craft, as any burn does.
+
+**Downlink.** Pictures wait on board in an image queue, in the order they were taken, and go down first on the next DSN pass, ahead of routine data. A pass starts at `SCIENCE_RULES.passStart_h` each day (game estimate) and lasts the booked hours; the image's downlink time is bits ÷ that day's link rate (the existing link budget and DSN booking). A picture is **home** one light time after its last bit leaves the craft. If the craft is lost, every bit already sent still arrives: a picture whose downlink had finished comes home, one cut off part-way is partial (shown as SIGNAL LOST, worth nothing) and one never started is not returned. The pass time the pictures use is taken out of that day's routine downlink.
+
+**Science returned.** At Mars, science returned = Σ wᵢ over the targets whose picture came home by the end of the prime mission. It is the main score (see Scoring).
+
+**Run length.** The Cadet Mars level (and the Daily, which flies to Mars) packs a prime science campaign of `SCIENCE_RULES.cadetCampaign_days` = 100 days (game rule). With a 285–311 day cruise the clock runs about four minutes at 100× (`flightClock_s`), and the decisions bring a run to about five. Engineer mode and the real MAVEN preset keep their planned science days.
+
+**The extension review stays on data.** The Senior Review stand-in (Mission extension) still judges the prime data sent home against the data goal at every destination, not the target weights, so a Mars flight that mapped all year can still be extended.
+
+### Mission objectives (Mars, v1.3)
+
+A Mars flight with targets picks one **mission objective** (`objectives.json`, `src/engine/objectives.ts`): **atmosphere** (the limb), **surface** (Olympus Mons, Valles Marineris, the North Polar Cap) or **moons** (Phobos, Deimos). A solo player picks in the Red Planet briefing, before packing, and must pick before launch (UI rule 56); in Team mode the Flight Director picks. Moon levels, the Daily and real-mission presets fly no objective and keep each target's own weight (balanced), so their scores and the validation are unchanged.
+
+Each objective names the catalogue instruments that do its science, after real Mars orbiters (game rule): atmosphere → the MAVEN payload (the sniffer); surface → the camera or radar (MRO's HiRISE and SHARAD); moons → the spectrometer. With W_fav the balanced weight of the objective's targets and s = `OBJECTIVE_RULES.share` = 0.6 (game rule):
+
+```latex
+w'_i = \begin{cases} s \, w_i / W_{fav} & \text{favoured target, a matching instrument packed} \\ (1 - s) \, w_i / (1 - W_{fav}) & \text{otherwise} \end{cases}
+```
+
+With a matching instrument the weights sum to 1; without one the objective's targets count at the others' rate and the set sums to (1 − s) / (1 − W_fav) (atmosphere 0.5, surface ≈ 0.77, moons ≈ 0.59). Science returned, the stars, the Science Targets cards and the album all use w′. In a calm flight every Cadet Mars pack reaches the same five targets (Deimos needs about 750 m/s), so the objective decides which instrument wins: atmosphere → sniffer 0.94 vs camera 0.44; surface → camera ≈ 0.91 vs sniffer ≈ 0.68; moons → spectrometer 0.775 vs camera ≈ 0.52 (`tests/objectives.test.ts`). **Finding (Nov 10, 2026):** so the moons objective cannot earn the third star (80%) with any Cadet pack: even the lightest one (spectrometer and the extra tank, about 40% Δv margin) cannot pay Deimos' ~750 m/s. Atmosphere (0.94) and surface (≈ 0.91) can, on a fixed seed with the safest answers (`tests/objectives.test.ts` "third star per objective"). The star rules are unchanged. From the HIGH ORBIT preset (UI rule 59) Deimos is in reach and the moons objective earns the third star (1.0 with the spectrometer and the extra tank).
+
+**Objective met** when a matching instrument was packed and at least `OBJECTIVE_RULES.metFraction` = 0.5 (game rule) of the objective's own balanced weight came home (`objectiveResult`). It feeds the Team score and is shown on the report; met or missed does not change the stars by itself. The pick does change them, through w′: science returned (and so every star rule) uses w′, so a craft without a matching instrument can return at most 50% (atmosphere), about 77% (surface) or about 59% (moons) of the science.
+
+### Moon orbit (v1.0)
+
+The Moon levels fly LRO's mission orbit: 50 km mean altitude, polar ([Beckman & Lamb, "Stationkeeping for the Lunar Reconnaissance Orbiter (LRO)", NASA GSFC, NTRS 20080012683](https://ntrs.nasa.gov/citations/20080012683)). Flying that low over a body that always shows Earth the same face has three consequences.
+
+**Earth's direction.** The Moon is tidally locked, and its prime meridian is the mean sub-Earth point. The engine rotates the body-fixed point (0°, 0°) into the inertial frame:
+- it uses the IAU rotation angle W = W₀ + Ẇ·d, with d in days from J2000 ([Archinal et al. 2018, IAU WGCCRE 2015](https://doi.org/10.1007/s10569-017-9805-5));
+- it turns about the IAU pole already used for eclipses (`planetFrame`).
+
+So the near side faces Earth by construction. The periodic (libration) terms are left out, so Earth's true direction can be several degrees away. This is a game simplification, labelled as one.
+
+Validation: at a full Moon the directions to Earth and to the Sun, seen from the Moon, nearly coincide; at a new Moon they point opposite ways.
+
+**Behind the Moon (loss of signal).** The science orbit is fixed in inertial space, as for eclipses, while Earth's direction ê turns once per sidereal month. The craft has no link while it is in the Moon's cylinder seen from Earth: r·ê < 0 and |r − (r·ê)ê| < R_Moon. This is the eclipse test with ê in place of ŝ; Earth is about 221 Moon radii away, so a cylinder is close enough.
+- **Hand check:**
+  - With Earth in the orbit plane (β-Earth = 0), a 50 km circular orbit is hidden for 2·asin(1737.4 / 1787.4) = 152.8° of every orbit.
+  - That is 48.0 min of T = 2π√(a³/μ) = 113.1 min.
+  - With Earth along the orbit normal (β-Earth = 90°) the whole orbit is in view, as Beckman & Lamb describe.
+- **Both directions are blocked.** The orbit phase is M = n·(t − t_arrival), so each loss of signal (LOS) and acquisition of signal (AOS) has an exact time.
+  - An order that would reach the craft during LOS waits and arrives at the next AOS. It is not refused.
+  - The downlink capacity and the image pass of each day are scaled by that day's visible fraction. This is orbit-averaged: passes are not lined up with single orbits, a game simplification.
+- **Light time** uses the mean Earth–Moon distance, 384,400 km, so 1.28 s each way. There is no lunar ephemeris yet.
+- **The robot** says BEHIND THE MOON and LINK BACK on its first far-side pass, and again whenever an order or a picture waits for the link. It does not speak every orbit, which would be about twelve times a day.
+
+**Station-keeping.** Mascons make a 50 km lunar orbit unstable: left alone, the periapsis sinks into the surface.
+- **What LRO did:** it held 50 ± 20 km with one pair of burns every sidereal period (27.32 d). The pattern LRO chose (270° LLAN, high transfer; Beckman & Lamb Table 2) costs 5.46 + 5.34 = 10.81 m/s per pair, within a 150 m/s per year allocation.
+- **Which orbits use it:** Moon orbits whose mean altitude lies in LRO's band (≤ 70 km) use the 10.81 m/s pair:
+  - in the Δv budget, one pair for each whole sidereal period of science (13 pairs, 140.5 m/s, for 365 days);
+  - in Ops as a burn pair at the end of each of those periods (`station-keeping` burns; the robot speaks at the first);
+  - in an extension and the lifetime reserve, at the same average rate, 10.81 / 27.32 = 0.396 m/s a day.
+  Other orbits keep the generic orbit-maintenance estimate.
+- **The Moon levels' craft** flies LRO's orbit: captured at 50 × 1,800 km, then lowered to 50 km circular, polar. The extra Δv is real: on Moon 3 a heavy pack (the radar with the big dish, no extra tank) now needs the fuel tank, and the radar kit no longer fits the 1,000 kg shared ride within the mass band.
+- **Check:** 365.25 / 27.32 × 10.81 = 144.5 m/s per year, within the 150 m/s allocation (a validation row).
+- A pair the tank cannot pay for loses the craft, like any planned burn (Propellant).
+
+**Eclipses at 50 km.** The physics is unchanged (Events known in advance): the Moon's cylindrical shadow on the fixed orbit. With the Sun in the orbit plane the longest eclipse is the same 48.0 min, since the geometry is the same. Earth's shadow (a lunar eclipse) is not modelled.
+
+**Targets (Moon 3).** The Moon 3 level has four targets (`targets.json`, Moon set), with coordinates from the IAU Gazetteer of Planetary Nomenclature:
+- the Apollo 11 landing site;
+- Tycho;
+- Shackleton (its floor is in permanent shadow);
+- Tsiolkovskiy (far side).
+
+They follow the Mars rules (Science targets and downlink), with these differences:
+- **No dips needed.** The camera is LROC's Narrow Angle Camera: IFOV 10 µrad, so 0.5 m per pixel at 50 km. The game's resolutions are met without lowering the orbit, and there is no atmosphere, so no drag.
+- **Tsiolkovskiy** lies on the far side, so its pass is always out of contact. The robot takes the picture alone and keeps it until the link is back.
+- **Shackleton** sits under every orbit of a polar ground track.
+- **Pictures** are LROC frames from the PDS archive (public domain), credited NASA/GSFC/Arizona State University (`moonTargets.json`, made by `scripts/fetch-targets.py`):
+  - Apollo 11: M175124932R, from 24 km;
+  - Tycho: the oblique pair M162350671L/R, side by side;
+  - Shackleton: the oblique M1346257675L, squeezed along the strip by cos(emission) to undo the slant;
+  - Tsiolkovskiy: M113107391L.
+- **Words:** the robot's order reply for a far-side target says it will shoot alone, out of Earth's sight. Its picture still comes home on the next pass Earth can see.
+- **Scoring:** science returned is Σ wᵢ over the pictures home, with the same star rules. Moon 1 and Moon 2 keep the data ratio.
+
+### Team mode (v1.3)
+
+One to four players share one craft: on one shared screen (local co-op), or each on a phone (the Online room, below). Each **seat** has a call sign from a preset list (`team.json` `callSigns`; nobody types a name) and holds one or more of four **roles**: Flight Director, Spacecraft Engineer, Science Lead, Comms & Ops. No role is held twice. A role nobody holds is **open**: any seat may act as it. Every rule below is a game rule (`team.json`, listed in `TODO_DATA.md`).
+
+**Who does what** (`src/engine/team/roles.ts`, `reduce.ts`).
+- Before launch: the Flight Director sets the mission objective and launches (on the chosen day). A part is packed or unpacked by its role: instruments → Science Lead; the dish → Comms & Ops; power, battery, fuel, the engine and the kit → Spacecraft Engineer; the computer → Flight Director.
+- In flight: the power plan → Engineer; OBSERVE → Science Lead; DSN bookings → Comms & Ops; standing orders and the extension → Flight Director.
+- A hazard is never answered directly: it goes through the danger-card vote.
+
+**The objective vote** (Mars; mockup screen T2). The Flight Director picks the objective; each of the three other roles then agrees or objects (a role may change or take back its voice). A role held by the Flight Director's own seat agrees by itself, and so does every role in a team of one. Once every voice is in, the Flight Director locks the objective: **agreed** if nobody objected, **overruled** otherwise. A new pick clears the voices; a locked objective cannot be changed. The team goes on to packing only with a locked objective. The vote is in the log (`objective-voice`, `objective-lock`); it does not count in the team score.
+
+**Each objective leans on one role** (`objectives.json` `strain`, a game rule): the atmosphere on the Science Lead (the limb is seen from deep dips, where drag heats the craft: a Science Lead danger card), the surface on Comms & Ops (the landmarks are the biggest pictures, so they need the most dish time), the moons on the Engineer (raising the orbit to Phobos and Deimos burns the most fuel). The objective card shows its targets with their share of the science (the rule's 60% split by weight), the parts whose instrument makes it count, and the role it leans on.
+
+**Setting up** (`team/setup.ts`; mockup screen T1). One to four players. The default crews (`team.json` `defaultRoles`): one player holds all four; two split Flight Director + Comms & Ops / Engineer + Science Lead; three give Science Lead + Comms & Ops to the third; four hold one each. A tap on a role's holder hands it to the next player round the table; a player left with no role is named, and the team cannot start until everyone holds one. A tap on a call sign steps to the next one on the list that no one else has. On one shared screen, a role's keys act as its holder (or the first seat, for an open role).
+
+**Danger cards.** The related role recommends: dangers seen from Earth (solar storms, CME shocks, debris) → Comms & Ops; dangers to the science (dust storms, drag heating) → Science Lead; the craft's own faults → Engineer. Every other seat may vote once. Then:
+1. **Flight Director held:** the Flight Director's call settles the card.
+2. **No Flight Director:** the card settles once every seat has a voice, by majority. A tie goes to the recommendation, or (if the recommendation is not among the leaders) to the craft's own default response.
+3. **A team of one:** the recommendation is the call.
+
+The settled card sends one ordinary `decide` at the mission time of the settling entry, so light time, the deadline and the robot's default at the deadline work exactly as in solo play.
+
+**One flight** (`team/fly.ts`; Team Fly, UI rule 51). The screen flies the mission with its own clock, and every order the team gives goes on the log with the mission time it was sent (`t`): danger-card votes, the power plan, OBSERVE, DSN bookings, the extension and the quick messages. The screen applies each order to its flight at that same time, so the flight on screen and the flight the log rebuilds are one mission. This holds because an operations state at time t does not depend on how the clock was stepped to t (the same property saving and resuming a solo flight relies on); `tests/teamFly.test.ts` flies a clock in uneven slices with a vote and an order through the log and checks that `replayTeam` ends where the screen's flight ends. Time passing is not an entry: the replay flies to each entry's time. A team that leaves the flight and comes back starts the screen from the team's flight, so it flies on from its log.
+
+**Shared mass, budget and space** (`team/negotiate.ts`). The launch mass, the development cost and the 6 × 6 nose are shared; the limits are the same meters solo players see, with no team-only caps.
+- **Each role's spend** (`teamSpend`) is its own subsystems' share of the same evaluation, so the roles add up exactly to the meters:
+  - Flight Director: the bus.
+  - Science Lead: the instruments.
+  - Engineer: power, battery, tanks, propellant, kit and the engine's cost.
+  - Comms & Ops: the radio.
+  - The 30% growth margin is spread pro rata. Squares go to whoever packed each part.
+- **Over a limit**, the conflict names the roles that packed optional (unlocked) parts there, the biggest spender first. For cost, only the parts that change the cost count: instruments, the dish, power.
+- **Conflicts over the log** (`teamConflicts`):
+  - A packing that takes the mass or the cost over raises a conflict; a later one that brings it back under resolves it.
+  - A part refused for lack of room raises a space conflict, resolved when that part is packed after someone makes room.
+  - A conflict still open at launch stays unresolved. The count feeds the Team score.
+- **Measured.** A Cadet Mars craft is at most $390M of the $500M cap. Its weight goes over only in tight windows with a full nose (2030: 11 kg over). The Moon levels' rideshare slot and the nose are where teams usually have to negotiate.
+
+**Team report** (`team/report.ts`). The Mission Report gets a Team section: one row per role (with the seat and call sign that held it), each with its key decision and what it did.
+
+Each role's key decision is the first one it has, in this order:
+
+| Role | Key decision, in order |
+| --- | --- |
+| Flight Director | the objective (met or not); a call; a part |
+| Engineer | a danger card it recommended on (a bad outcome first, else the latest); a part |
+| Science Lead | the pictures it ordered and the science home; a card; a part |
+| Comms & Ops | a card; the DSN days it booked; a part |
+
+A part row names the dangers the part covered that really happened.
+
+A card row also carries the mission day it was settled (the settling entry's time) and how the seats voted: the seats whose voice was the settled option and the seats that wanted another. Each row has a **verdict** (`rowVerdict`, game rule): good (the objective met, a card that held, every ordered picture home, a part whose danger came, DSN days booked), bad (the objective missed, a card that went badly, no picture home), mixed (some pictures home) or none (no call, a part whose dangers never came).
+
+The **team score** (0–100, game rules) is Σ wᵢsᵢ with:
+- **objective:** 0.5, s = 1 if met;
+- **conflicts:** 0.25, s = resolved ÷ raised (1 with none);
+- **votes:** 0.25, s = settled cards whose result matched the recommendation ÷ settled cards (1 with none).
+
+With no objective (Moon levels, the Daily) the other two share the score in proportion to their weights. The team score is shown on its own and never changes the prime score or the stars: a team flight's debrief equals the same orders flown solo.
+
+**Quick messages only.** Players may be children, so the team talks in preset messages (`team.json` `quick`, words in `sdWords.ts`); there is no free text anywhere.
+
+**One action log** (`team/log.ts`). Every entry is `{seq, seat, role, t?, act}`: the seat, the role it acts as, the mission time for entries in flight, and the action (setup, objective, objective-voice, objective-lock, pack, unpack, launch, ops, recommend, vote, call, say). Refused entries stay in the log and in the state with their reason, as refused commands do in Mission operations.
+
+All entries travel through a **Transport** (`team/transport.ts`: `send`, `subscribe`, `log`). `LocalTransport` is one device passed around the table; the Online room's `OnlineHost` and `OnlineClient` implement the same interface.
+
+**Determinism.** Live play and replay apply entries through the same `stepSession` (fly on to the entry's time, apply it, start the flight on a launch, send its orders). The mission is a function of (base design, seed, team log): `replayTeam` rebuilds the same design, flight, debrief and team state (`tests/team.test.ts`).
+
+### Online room (v1.4)
+
+Every player joins on their own phone; one **host screen** (a classroom projector or a laptop) shows the full game. Every rule below is a game rule (`online.json`, listed in `TODO_DATA.md`).
+
+**Host-authoritative** (`team/online.ts`). The host screen runs the engine and owns the one team log. A phone sends role-tagged actions (`act {role, act}`); the host checks each one, in this order: the protocol version, a phone it knows, the phone's rate limit, and that the phone's seat may act as that role (`mayActAs`). A refused action is answered to that phone only (SLOW DOWN, not your role) and never reaches the log. An accepted one goes on the log through the host's transport (`OnlineHost`, which wraps `LocalTransport`), and every entry is broadcast with its place (`seq`). The mission time of an entry in flight is always the host's: a phone never sends a time. A phone's order to the craft (power plan, OBSERVE, a DSN booking, the extension) runs through the host screen's own console, exactly as a key there would, so it is logged and applied at the same mission time (rule 51's one flight).
+
+**One mission on every screen.** A phone rebuilds the mission from (base design, seed, log) with the same `stepSession`, and flies its copy on to the host's clock (`sessionAt`). The host shares its clock (`RoomClock`: mission time, speed, running) when it starts, stops or changes speed, when it has drifted `clockDrift_days` from what the phones run on, and every `clockResync_s` (10 s); a phone runs it on in between (`clockAt`). Same (design, seed, log) → same mission (`tests/online.test.ts` plays a four-phone Mars mission over a relay that reorders every delivery and loses entries, and every phone's `replayTeam` equals the host's).
+
+**The relay.** The site is static (GitHub Pages), so the messages go through a managed relay: Supabase Realtime broadcast and presence on a public channel per room (`sd-room-<CODE>`), with only the project's public publishable key in the site (`online.json` `relay`). Nothing is stored on the relay. A phone's log is the entries in `seq` order; a gap, or a host clock or room message saying the log is longer, asks the host to catch it up (`hello since`). A phone pins the first host that answers. **Who is here** comes from presence and from heartbeats. A real relay's presence settles in steps (it can list a phone late, or leave a linked phone out of one list), and it can keep listing a phone whose network is gone for a minute or more. So the host drops a phone only once presence has shown it, links a phone again when presence shows it again, and also drops a phone it has not heard from for `silentDrop_s` (30 s). Every screen that has sent nothing for `beat_s` (10 s) sends a heartbeat (a phone's `beat`, the host's `pulse` with its log's length), and a phone not hearing its host for `silentDrop_s` starts the host's grace. A dropped phone's next message links it again. The free plan was checked in November 2026: 200 connections, 100 messages/s, 2 million messages a month; a free project pauses after a week without database activity, so the daily Pages run reads one row (`scripts/relay-keepalive.mjs`).
+
+**Rooms** (`team/room.ts`).
+- **Codes.** A room code is a space word and three characters (`MARS-7K2`); a resume code is seven characters (`K7QB-2X4`). The characters leave out 0, O, 1, I and L.
+- **Seats.** Up to four phones. A phone is a random token kept in its browser, never a name; the host gives it the next seat and call sign. In the lobby each phone picks a free role (a role another phone has is taken). START needs a Flight Director; the roles nobody picked go to the Flight Director's phone. After the start, a new phone may only take over a seat that is waiting for its phone.
+- **A phone drops.** Its role is held for `seatHold_s` (45 s) and the host's clock holds. Then (or at once with HAND NOW) its roles go to the Flight Director, or to the first linked phone if it was the Flight Director, by `hand` entries on the log. When the phone comes back it catches up from the log and its roles are handed back.
+- **The host leaves.** The phones wait `hostGrace_s` (20 s, a reload), then show that the room ended, with the resume code. The host's browser keeps the room under that code (`resumeTtl_days`); RESUME A MISSION reopens it with the same room code and log, and the phones rejoin by themselves.
+- **Expiry and rate.** A room closes `roomTtl_h` (3 h) after it opened, or after `idleClose_min` with no phone linked. Each phone may send `rate_perS` actions a second, with a burst of `burst`.
+- **No relay.** When the relay cannot be reached (or is not set up), the room says so and offers local co-op: the same four roles on one screen.
+
+**Safety.** No accounts, no names (call signs only), no free text (the preset quick messages). The room code is the only key to a room; anyone with it can join a free seat, and the host can free a lobby slot. A public channel cannot stop someone with the code from forging messages; the phones' host pinning makes that harder, and nothing personal is ever sent.
+
+## Validation set
+
+The engine passes validation when it reproduces each real mission's key numbers within ±10% using the same equations as the player. The results table goes on the Sources & Assumptions page; it is the strongest evidence for the Validity score.
+
+| Mission | Launch vehicle | Wet mass (kg) | Dry mass (kg) | Other published values | Engine must reproduce | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| [MAVEN](https://science.nasa.gov/mission/maven/) (Mars, 2013) | Atlas V 401 | 2,454 | 809 | 12 m² arrays, 1,150–1,700 W at Mars; 2 m high-gain antenna; 65 kg science payload; Mars orbit insertion Sept 21, 2014 | Power range (η\_sys ≈ 0.20); Δv capability from the rocket equation; transfer time \~10 months | NASA Science |
+| [OSIRIS-REx](https://arxiv.org/pdf/1702.06981) (Bennu, 2016) | Atlas V 411 | 2,105 | \~860–880 (sources differ) | Launch C3 = 29.3 km²/s²; Earth flyby Sept 2017 | Atlas V 411 curve ≥ 2,105 kg at C3 29.3; game must flag that the real mission used a flyby | Mission description paper (arXiv 1702.06981) |
+| LRO (Moon, 2009) | Atlas V 401 | to verify | to verify | to verify | Lunar orbit insertion Δv; power; data rate | NASA LRO mission page (to open) |
+
+MAVEN's mission ended after contact was lost on Dec. 6, 2025; NASA declared the end of mission on June 3, 2026 ([NASA Science: MAVEN](https://science.nasa.gov/mission/maven/)). The game should label it "MAVEN (2013–2025)", which also gives it a strong "real history" story.
+
+**How to run it.** A unit test file `validation.test.ts` loads each mission as a player design, runs the full engine, and asserts the tolerance. If a test fails, fix the model or the data, never the expected value.
+
+**Row kinds (decided).** Every row in the results table is labelled:
+- **validation:** engine output vs an independent published value.
+- **calibration:** a constant was fitted to this value, so agreement is by construction (MAVEN power → η\_sys).
+- **info:** not a pass/fail check.
+
+**MAVEN checks added in v0.2**, from [NASAfacts: MAVEN Orbit Insertion](https://science.nasa.gov/wp-content/uploads/2024/03/44740_MAVEN-Fact-Sheet.pdf):
+- Capture orbit: 35-hour period, 380 km periapsis.
+- Science orbit: about 150 × 6,300 km. Kepler's third law must give the published 4.5-hour period.
+- The orbit-insertion burn must use more than half the propellant.
+- 1-Earth-year primary mission.
+
+**Mission operations checks added in v0.4:**
+- **Mars solar conjunctions.** The engine's least Sun–Earth–Mars angle must fall within ±2 days of the middle of each published command moratorium:
+  - 2015: June 7–21, "within two degrees" ([JPL](https://www.jpl.nasa.gov/news/mars-missions-to-pause-commanding-in-june-due-to-sun/));
+  - 2017: July 22 – Aug. 1 ([JPL](https://www.jpl.nasa.gov/news/for-moratorium-on-sending-commands-to-mars-blame-the-sun/));
+  - 2019: Aug. 28 – Sept. 7 ([JPL](https://www.jpl.nasa.gov/news/whats-mars-solar-conjunction-and-why-does-it-matter/)).
+  The 2015 window at 2° must also match the published length within ±2 days.
+- **Mars perihelion Ls.** It is computed from the IAU pole and the ephemeris, against L_s,p = 251.000° + 0.0064891° × (year − 2000) ([NASA GISS Mars24 technical notes](https://www.giss.nasa.gov/tools/mars24/help/notes.html)).
+- **Info:** the Ops loss rate against the Risk meter. Ops replaces the base rates with hazards, so this row shows the difference and is not a pass/fail check.
+
+**Known gap:** the Atlas V payload curves are placeholders until NASA LSP points are exported, so the launch-capacity rows are not real evidence yet.
+
+## Scoring
+
+**Science returned is the main score (v0.8).** The report's headline, the stars and the Daily share all use it: at Mars the weights of the targets whose pictures came home, elsewhere data downlinked ÷ goal. The weighted total below is still computed and shown openly in Engineer mode, so the Debrief number always adds up. Science comes first, because that is why missions fly.
+
+```latex
+Score = \sum_i w_i \, s_i, \qquad s_i \in [0, 100], \quad \sum_i w_i = 1 \qquad (\text{Score} \in [0, 100])
+```
+
+| Category | Weight | How sᵢ is computed |
+| --- | --- | --- |
+| Science return | 0.30 | Mars: 100 × Σ wᵢ over the targets home (w′ᵢ with a mission objective, v1.3). Elsewhere: data downlinked ÷ science goal (capped at 100); science goal = Σ instrument data/day × planned science days, so the radio or a lost mission lowers it |
+| Mission success | 0.20 | 100 if all phases complete; partial credit per phase reached |
+| Budget discipline | 0.15 | 100 at or under cap; falls linearly to 0 at 20% over (game rule) |
+| Propellant (Δv) margin | 0.10 | Margin band score (below) |
+| Power margin | 0.10 | Margin band score |
+| Mass margin | 0.10 | Margin band score |
+| Crisis handling | 0.05 | Outcome of the crisis decision vs the risk taken |
+
+**Margin band score.** Margins are scored on a band, not "more is better". Too little margin is risky; too much means the player carried mass or power they did not need. 100 inside 10–30% margin, falling linearly to 0 at 0% margin and at 80% margin. This mirrors real design practice and is the trade-off judges will look for.
+
+**Stars.**
+
+1. The first science came home (Mars: the first picture; elsewhere: the first data).
+2. Science returned ≥ 50%.
+3. Science returned ≥ 80%.
+
+Stars are earned in order (v0.8; game rules in `STAR_RULES`). Before v0.8 they were: science started, science ≥ 70%, every margin in its band. The margins still score and are still shown in the report. The end-of-mission Δv margin includes crisis spending. The power margin is the Power meter's: the worst day of the prime mission, eclipses included (v0.5; before, it was the last science day). This is the margin the player sizes and sees, so the band is judged on the same number. Mission operations scores it the same way.
+
+The Debrief's "For the next star" hint is computed by the engine (for example, extra propellant from the rocket equation, checked against unused launch capacity).
+
+## Assumptions (for the Sources & Assumptions page)
+
+These are stated openly in the game. Each one is a standard simplification for early concept design.
+
+1. Patched conics: only one body's gravity acts at a time.
+2. Planet positions from JPL's approximate Keplerian elements (valid 1800–2050), not a full ephemeris.
+3. Launch windows from a zero-revolution Lambert solver, capped at less than one revolution of the Hohmann transfer orbit; no gravity assists or deep-space manoeuvres, except the fixed, labelled NASA real route to Bennu.
+4. Launch vehicle performance interpolated from NASA LSP points; mission-specific analysis would change it.
+5. Impulsive burns: engines change speed instantly. Ion engines are limited to cruise and rendezvous to stay honest about this.
+6. Solar power from the inverse-square law with one calibrated efficiency (η\_sys = 0.20 from MAVEN).
+7. Data rate from a scaled link budget anchored to one real mission; band and coding held fixed.
+8. Mass growth margin 30%, tank mass 12% of propellant, and 50 m/s for trajectory corrections: game rules, not NASA requirements.
+9. Part costs are estimates until sourced; caps follow NASA Discovery / New Frontiers conventions.
+10. Base failure rates for non-launch phases are game values; launch reliability uses each vehicle's flight record.
+11. Thermal, radiation dose and atmospheric drag are not modelled, except through crisis cards. In Mission operations, the Jupiter radiation dose is modelled (game estimates), heaters are a power load, and cold days raise hardware hazard rates.
+13. **Mission operations:**
+    - the science orbit is fixed in inertial space (no J2 precession) and the shadow is cylindrical;
+    - the clock moves in whole days, with commands taking effect part-way through a day;
+    - hazards are independent Poisson processes;
+    - the solar cycle is a two-part cosine between published minima and maxima;
+    - the Moon has no conjunctions (no lunar ephemeris);
+    - at the Moon, Earth's direction is the IAU rotation angle without its periodic (libration) terms, and the Earth–Moon distance is the mean 384,400 km;
+    - the Moon's shadow and Earth's are cylinders, and Earth's shadow on the Moon (a lunar eclipse) is not modelled;
+    - cruise positions are drawn in the ecliptic plane;
+    - DSN fees are in FY09 dollars.
+12. Real-mission presets use published as-built dry mass (no 30% growth margin on top) and their planned prime-mission duration.
+
+Any game value must be labelled "game estimate" in its ⓘ popover, never presented as NASA data.
+
+## Engine structure for Claude Code
+
+The engine is pure TypeScript with no UI imports, so it can be unit-tested and validated before any screen exists. The UI calls one function, `evaluateDesign`, and renders what comes back.
+
+```
+src/engine/
+  constants.ts        // Section: Constants (each with source)
+  ephemeris.ts        // JPL approximate positions → planet x,y on a date
+  trajectory.ts       // Hohmann, Lambert, C3, v∞, capture Δv
+  propulsion.ts       // rocket equation, propellant needed
+  launch.ts           // payload(C3) interpolation, reliability
+  power.ts            // solar 1/r², RTG, batteries
+  comms.ts            // scaled link budget, light delay
+  massCost.ts         // mass roll-up, cost vs cap
+  risk.ts             // phase risk, Monte Carlo
+  crisis.ts           // crisis cards + effects
+  scoring.ts          // weights, margin bands, stars, next-star hint
+  missions.ts         // real-mission presets → Design
+  index.ts            // evaluateDesign(), simulateMission(), monteCarloMission(), previewCrisis()
+  compare.ts          // designDelta() for part cards, compareWithRealMission() for the Debrief
+  designEdits.ts      // pure edits to a Design, shared by the UI and cadet.ts
+  cadet.ts            // Cadet guided build: sizing, cards, chips, gauges, testFlight()
+  flightMap.ts        // craft position, signalDelay(), countdown(), flight frames, map, ghostFor()
+  rescue.ts           // Rescue History cases, clues, consequence, stars
+  ops/                // Mission operations (no UI yet)
+    types.ts          //   state, ledger rows, events (codes + values), commands, decisions
+    predictable.ts    //   Sun–Earth–probe angle, conjunctions, eclipse seasons, Ls, Jupiter dose, forecast
+    random.ts         //   hazard rate models, per-hazard random streams, Poisson thinning
+    commands.ts       //   light-delayed command queue, moratorium
+    resources.ts      //   power plan and load shedding, recorder, DSN bookings and fees
+    responses.ts      //   hazard responses the margins can pay for, effects
+    extension.ts      //   extension options and report
+    timeline.ts       //   prepareOps (fixed day-by-day environment) and the mission clock
+    index.ts          //   startOperations, advanceOperations, sendCommand, decide, bookDsn, runOperations, operationsDebrief, operationsForecast
+src/data/
+  destinations.json   launchVehicles.json   parts.json
+  missions.json       // MAVEN, OSIRIS-REx, LRO presets
+  crisisCards.json
+  lessons.json        // Cadet lesson cards (Jupiter: Juno's gravity assist)
+  rescueCases.json    // Rescue History: Mars Climate Orbiter
+  operations.json     // Mission operations parameters (conjunction threshold, solar cycles, DSN fees, …)
+  hazards.json        // Mission operations hazards, responses, real history
+tests/
+  physics.test.ts     // each equation vs hand calculation
+  validation.test.ts  // real missions within ±10%
+```
+
+```ts
+interface Sourced<T> { value: T; unit: string; source: string; url?: string; isGameEstimate: boolean }
+
+interface Design {
+  destination: 'moon' | 'venus' | 'mars' | 'bennu' | 'jupiter';
+  launchVehicleId: string; launchDate: string; arrivalDate: string;
+  busId: string; instrumentIds: string[];
+  power: { type: 'solar' | 'rtg'; arrayArea_m2?: number; rtgCount?: number };
+  comms: { dishDiameter_m: number; txPower_W: number; groundDish_m: 34 | 70 };
+  engineId: string; propellant_kg: number;
+  captureOrbit: { periapsis_km: number; apoapsis_km: number };      // altitudes
+  missionClass?: 'discovery' | 'newFrontiers';                        // cost cap; default discovery
+  scienceDays?: number;                                               // planned science phase; default 365
+  lifetimeDays?: number;                                              // planned lifetime ≥ scienceDays (Δv reserve)
+  scienceOrbit?: { periapsis_km: number; apoapsis_km: number };      // altitudes; default = capture orbit
+  trajectoryOption?: 'direct' | 'nasa-earth-flyby';                   // fixed route: Bennu only
+  asFlownDryMass_kg?: Sourced<number>;                                // real-mission presets only
+}
+
+interface Meter { used: number; limit: number; margin: number; status: 'ok' | 'warning' | 'over';
+  equation: string; inputs: Record<string, Sourced<number>>; calibrated?: boolean }
+
+interface Evaluation {
+  meters: { mass: Meter; power: Meter; deltaV: Meter; data: Meter; cost: Meter; risk: Meter };
+  blockers: string[];          // plain language, e.g. "Too heavy by 120 kg"
+  notes: string[];             // non-blocking, e.g. "flybys are not modelled"
+  trajectory: { c3: number; vInfArr: number; flightDays: number; path: [number, number][];
+    method: 'lambert' | 'hohmann' | 'fixed-route'; maxFlightDays?: number };
+  details: { /* masses, Δv budget, power at arrival and end of science, cost and mass breakdowns,
+               phase risks, light delay … everything the Build Bay and Debrief show */ };
+}
+```
+
+Entry points: `evaluateDesign`, `simulateMission`, `monteCarloMission`, `previewCrisis`, `crisisOrders` and `standingOrderPolicy` (`index.ts`); `designDelta` and `compareWithRealMission` (`compare.ts`); `bestLaunchWindow` (`trajectory.ts`); `cadetOptions`, `buildCadetDesign`, `cadetGauges` and `testFlight` (`cadet.ts`); `flightFrames`, `flightMap`, `signalDelay`, `countdown` and `ghostFor` (`flightMap.ts`); `rescueCase`, `inspectClue` and `rescueConsequence` (`rescue.ts`); `startOperations`, `advanceOperations`, `sendCommand`, `decide`, `bookDsn`, `runOperations`, `operationsDebrief` and `operationsForecast` (`ops/index.ts`).
+
+Build order: constants → ephemeris → trajectory → propulsion → launch → power → comms → massCost → validation tests → risk, crisis, scoring. Don't build UI on a module until its tests pass.
+
+## UI rules
+
+The UI (`src/ui/`, React + Vite) follows the Claude Design mockups for Build Bay and Debrief (reference copies in `docs/design/`).
+
+1. **The engine computes every number on screen.** The UI only converts units for display (the display rules in "Constants and units"). Part-card effects come from `designDelta`, the real-mission comparison from `compareWithRealMission`, the crisis card from `previewCrisis`, and starter launch dates from `bestLaunchWindow`.
+2. **Engineer mode** shows each meter's `equation` and every entry in `inputs`. **ⓘ** opens the `Sourced<T>` record: source, unit, link, and a "game estimate" badge when `isGameEstimate` is true.
+3. **Status** is always shown with an icon, a colour and a label. Over-limit bars are also hatched.
+4. **Mission Budget meters:** mass, power, Δv, data, cost and risk. The mockup's "Reliability ≥ 85% (Π Rᵢ)" meter is replaced by the engine's Risk meter (mission failure probability against 20%, game estimate). The Risk meter is the Mission operations Monte Carlo and always shows its run count and seed. While it runs, it shows the runs so far and a provisional value with no status. See "Why there is no Reliability meter" in the risk section. When a meter's limit rests on a game estimate (risk limit, comms reference link), the badge shows on the meter itself, not only in ⓘ.
+5. **Real-mission comparison** (Mission Report) uses mass, power and Δv (see "MAVEN cost"), with the biggest gap flagged, plus the preset's launch date and planned science days. Burn length, actual lifetime and how the mission ended are not shown: there is no thrust data, and the history is free text (v0.6). Mars is compared with MAVEN and Bennu with OSIRIS-REx. Other destinations have no comparison until a sourced preset exists.
+6. **Score** is shown as 0–100. Category grades are STRONG ≥ 70, FAIR 40–69, WEAK < 40 (game rule). The row the next-star hint is about is highlighted.
+7. **English and Bangla** (v1.1; rule 48). The screens' words switch between English and Bangla, and so do the data's cited texts (v1.2), whose English original stays in ⓘ. The engine's own messages (blockers and notes) stay in English until they are returned as codes with values.
+8. **Engineer flow (v0.6):** Build Bay → Launch → Fly & Survive → Mission Report with Engineer details. The single crisis card is no longer flown in the UI; `simulateMission`, `previewCrisis` and `monteCarloMission` stay for the engine and validation tests.
+
+**Cadet mode (the default).** Cadet follows rule 1 too: every number comes from the engine. Since v0.6, rules 9–12 are replaced in the UI by the Signal Delay rules 21–27 (Pack replaces the guided build, the Test Flight and standing orders; Fly & Survive replaces the Flight screen and Mission Control). The engine functions behind them (`cadetOptions`, `testFlight`, `crisisOrders`, `flightFrames`) are kept and tested.
+
+9. **One decision per screen.** The guided build asks Science, Power, Radio, Fuel, Rocket in turn ("Step 2 of 5 — Power"), with 2–3 big cards and at most one short helper line.
+   - Each card is a whole design from `cadetOptions`.
+   - Sized cards come from the model itself: `sizeKnob` finds the smallest array, RTG count or propellant load that reaches a target margin, by bisection over `evaluateDesign`. Power is sized on the worse of arrival day and end of science.
+   - Targets are labelled game estimates: lean 10%, balanced 25%, roomy 50%. Fuel is re-sized last, so an earlier change never leaves a stale load.
+   - Chips show what the part on the card weighs, makes and costs: ⚖ kg, 🔋 W, 📷/📡 photos per day, ⛽ spare kg, coins (one coin = 5% of the cost cap, game estimate). A red tag names any gauge the card would push over its limit.
+10. **Metaphor gauges** replace the meters: weight → a balance scale (with the rocket straining when over), power → a battery, Δv → "Fuel to reach …", data → photos sent home per day (one photo = an 8.39 Mbit frame, game estimate), cost → a coin jar against the cap.
+    - Each gauge carries its meter's status, shown with icon, colour and label.
+    - Tapping a gauge shows the meter's real numbers with the ⓘ of every input. Equations stay in Engineer mode.
+11. **Test Flight** (`testFlight`) places each blocker in the phase where it bites (too heavy → launch, power → cruise, Δv or no-capture engine → arrival) and marks thin margins (below 10%) as shaky. It shows the seeded Monte Carlo loss per phase, and the preview stops at the first failure.
+12. **Standing orders and light-delay Mission Control.** From Mars on, the player queues an order for each crisis card the mission can meet (`crisisOrders`).
+    - The craft acts on its order when the crisis comes (`standingOrderPolicy`). The odds are the same as for any other choice.
+    - The Flight screen pauses on the crisis day. A pulse carries the news to Earth with a countdown of the real one-way light time (`signalDelay`, `countdown`).
+    - A new command arrives one round trip after the crisis began, too late. No new risk rule is added.
+13. **Level map.** Moon (3 parts) → Mars → Venus → Bennu → Jupiter. Each level opens only the steps it teaches; the others keep balanced cards, so every level starts flyable. One star opens the next level.
+    - Jupiter is the "impossible" lesson: no Atlas V in the catalogue reaches the direct C3. A Test Flight that fails at launch earns its star and shows Juno's real gravity-assist route (sourced).
+14. **Rescue History.** A real lost mission's published file and the clues from its failure report. Mars Climate Orbiter is the first case: the board's root cause and three contributing causes.
+    - The player picks the bug. Stars drop by one per wrong guess (game rule).
+    - The consequence is computed from the published altitudes.
+15. **Ghost on the flight map.** Mars and Bennu show the real mission's path (MAVEN, OSIRIS-REx) from its preset through `evaluateDesign`.
+    - It is turned about the Sun to start beside the player, which keeps its shape and Sun distances, and is labelled so.
+    - Other destinations have no ghost until a sourced preset exists (rule 5).
+
+**Operations Console (both modes).** Built from the Claude Design mockups `Operations Console.dc.html`, `Ops Console Desktop.dc.html` and `Ops Console Mobile.dc.html` (copies in `docs/design/`). It follows rule 1: every number comes from `consoleView`, `powerPlanPreview` and `dsnOptions` (`src/engine/ops/console.ts`). Cadet reads sentences; Engineer adds the mission elapsed time, distances, the Sun–Earth–probe angle, each gauge's equation and the ⓘ of its inputs.
+
+16. **Console (v0.6: Fly & Survive).** Every launch, in both modes and from every level, flies the craft in Fly & Survive (rule 22), pinned at launch, with the flight's seed.
+    - The layout has a clock row (day, phase, status chip, one-way light time, Pause / 1× / 10× / 100× = 0 / 1 / 10 / 100 mission days a real minute, "Next event").
+    - The map reuses the flight map, with the real-mission ghost and light pulses along the Earth–craft line. Resources (power today, fuel, recorder, budget reserve) use rule 3 statuses.
+    - The Upcoming strip shows the next 60 days (game rule): conjunctions and eclipse seasons as bands; planned burns (not daily upkeep), phases, marked passes and the first bookable day as points.
+    - "Next event" stops at commands arriving, phases, planned burns, conjunction warnings and edges, eclipse seasons, science resuming and the end of the prime mission. It never stops at a hazard Earth has not seen yet (the clock stops by itself when one becomes known).
+    - Keyboard: Space pause, 1/2/3 speed, N next event, Esc closes a side panel.
+17. **Hazard alert.** The clock auto-pauses when a decision opens. The alert shows the hazard, its real history with the "to verify" badge (from `isGameEstimate`), and **every** response of the hazard type. The ones the margins could not pay for when Earth learned of it are shown disabled, with what is missing (`optionBlockers`). Each card shows its costs and a five-segment risk bar (failure-chance bounds 0.5 / 1 / 3 / 10%, game rule). The craft's fallback (standing order or fault protection) is tagged.
+    - Send queues the response once the team has reacted, then the command crosses space with a live countdown (time runs fast until it arrives). The result card shows the outcome when it lands.
+    - "Let the craft decide" leaves the hazard to the fallback at the deadline. During a conjunction nothing can be sent, so the alert says so and the clock may run.
+18. **Commands and calls home.** The power plan is a dial with two handles (science duty, heater share) and a radio switch. `powerPlanPreview` gives today's margin, the battery's depth of discharge in the coming eclipse season against the 30% limit, photos per day and a cold warning. Sending it is a command with light delay.
+    - "Book a call home" offers the small (34 m) or big (70 m) dish for one pass, with the data, photos and the extra aperture fee. It is ground-side (no light delay) but booked a lead time ahead; a refused day names the first free day.
+    - The command queue shows commands in flight (countdown, progress) and the latest carried out or too late. It warns 14 days (game rule) before a conjunction.
+19. **Blackout and safe mode.** In a conjunction the console shows "Radio blackout · day x of n", the day contact returns, and "Skip ahead". Send buttons are disabled. Safe mode shows the instruments off and the day science resumes: the engine resumes it by itself, so there is no "Recover" button.
+20. **Extension and Ops debrief.** At the end of the prime mission the console offers End / +1 yr / +3 yr cards from the extension decision, with the reasons a blocked one cannot be flown. The Ops debrief shows the prime score and stars from `operationsDebrief`, with the extension reported separately.
+    - **Not shown, because the engine does not model it:** a failure chance for an extension, DSN station names (DSS-xx), a "send all at the next pass" queue (each command leaves at once and pays the light delay), and the Bangla text (rule 7).
+
+**Signal Delay screens (v0.6).** Built from the Claude Design project "Signal Delay" (`docs/design/signal-delay/`): the design is the visual source of truth, and rule 1 holds everywhere. Display game rules are Sourced and registered in the data audit (`FLY_RULES`, `STAR_RULES`, `pack.json`).
+
+21. **Theme.** Colours, fonts (Big Shoulders Display, B612, B612 Mono, VT323), radii, spacing and shadows come from the design as CSS variables in `src/ui/styles/theme.css`. The design canvas's demo controls (screen headers, "jump to", the phone clock) are not shipped.
+22. **Fly & Survive.** A CRT map (Sun-centred; the path flown and the path ahead; the real mission's turned ghost), a teletype log line, four five-segment tiles (power from today's margin, fuel from propellant left, data from science sent home against the goal, systems health), the day clock with Pause / 1× / 10× / 100×, and a Coming Up ribbon of the next 150 days (eclipse and conjunction seasons, course fixes, the arrival burn, Mars dust-storm seasons; never a hazard Earth has not seen).
+    - A **danger card** stops time. It shows the hazard, "danger arrives in …", "your order takes …" (one-way light time), the real history with its "to verify" badge, and every response as a choice (← / →, ↓ for a third; swipe on a phone). Unaffordable responses are shown disabled with what is missing. Chips show the costs as segment drops and the **risk increase over the safest response as "⚠ +n risk", never as a negative number**. No text on the card is ever cut off: on a desktop the side choices narrow to fit the map, a screen shorter than the design's tightens the card, and a card still taller than the map scrolls from its top (checked at both shot sizes, solo and team, by `tests/visual/cardfit.spec.ts` and `team.spec.ts`).
+    - Choosing sends the order: first the team's reaction, then the light-time trip with a live countdown and a pulse crawling from Earth to the robot. If the order lands before the danger strikes, time runs on until the outcome. The result is typed out as an INCOMING message.
+    - An **eclipse planning card** opens a few days before each eclipse season: keep the plan (warm) or turn the heaters down (save power), with the battery depth-of-discharge segments from `powerPlanPreview`. Saving power is a command with light delay.
+    - The power plan, call home, command queue, blackout, safe mode and extension are drawers. Engineer adds r, d, t = d/c and an EQUATIONS drawer with every gauge's equation and ⓘ.
+23. **Systems health** (game rule): five segments, one off per reaction wheel lost, instrument lost, safe mode now, brownout streak and degraded pointing; none when the craft is lost.
+24. **Pack.** The nose is volume: a 6 × 6 grid of squares, and each part has a footprint (game rules). Weight is a separate limit: the launch meter, drawn as a scale beside the nose. Every part changes the design or Mission operations (`pack.json`, `Design.kit`):
+    - instruments, the 3 m dish, +4 m² of array (or one more RTG), +20% propellant, a 1.5× battery, kit mass;
+    - failure-chance factors (shield, bumper, spare computer), a heater cold factor;
+    - the autopilot: with no standing order, the robot takes its safest affordable response.
+
+    Blockers name the limit that failed: "No room in the nose", "Too heavy for this rocket", power, fuel, capture, flight length, no science.
+    "Not enough fuel" also names the part that fixes it, when one does (`packBlockers` `fix`): the extra tank, if it is on the shelf, not packed, fits in the nose, and the engine finds the craft has fuel with it. On a low Moon orbit the line says why: "PACK THE EXTRA FUEL TANK — THE 50 KM ORBIT NEEDS TRIM BURNS EVERY MONTH" (v1.0, Moon orbit).
+25. **Danger deck.** The destination's hazards plus the foreseeable eclipse season and solar conjunction. A danger is COVERED by two or more packed parts whose effect touches it, and has SOME COVER with one (game rule). The coverage lists are tested against the data (the tank covers exactly the hazards with a Δv-costing response).
+26. **Launch calendar** (its own short step, LAUNCH DAY, after Pack). Six weeks of launch days around the best one, each with its lowest-energy arrival. A day is good, so-so or bad by the worse of the launch-mass and Δv meter statuses on that day (ok / warning / over). Until the player picks a day, the craft flies on the **best day** (`bestLaunchDay`: the best quality, then the widest of the two margins, then the day nearest the starter's; game rule), shown on Pack in one line with CHANGE ▸. The step shows the calendar, the day's arrival and flight time (Engineer: C3, arrival v∞ and both margins), USE THE BEST DAY, and its own ARM / LAUNCH. LAUNCH needs the ARM lever, a day that is not bad and no blockers. The packing and the pick are kept while the player goes between the two screens.
+27. **Mission Report.** After the Mission Album (rule 43, v0.8), the **FINAL TRANSMISSION** comes off the teletype (`finalTransmission`): the robot's last message, 3–5 lines of codes and values from the mission and the report verdict (the opening day and science days, then the most telling moments in time order: what hurt it, the arrival burn, the first conjunction, what saved it; nothing to tell is a line too), sent when the robot signed off (or was lost) and received one light time later. Three endings: complete (signs off), lost (what ended it, then a line that breaks off mid-word, then SIGNAL LOST, citing Opportunity) and extended (fuel left, the years flown, STILL HERE; stamp MISSION EXTENDED). A launch failure sends none. FEED THE PAPER (or the last line printing) starts the comic. Then the flight as four comic panels (launch, the two most significant moments, the end), stars with their rules (`STAR_RULES`), what saved you and what hurt you, you vs the real mission (rule 5) and a real lesson from the flight (a Sourced real-history text). Engineer adds the score breakdown (Σ wᵢsᵢ, with the next-star row highlighted), the ⓘ of every comparison value and the Mission operations risk.
+28. **Home.** The landing screen in Cadet. It holds the wordmark, the teletype pitch and two big keys: PLAY (the first open level without a star) and the Daily. Rescue History, the Notebook, Postcards and the Engineer-mode lever sit on a smaller second row (user request: the two ways to play come first). The keys carry engine counts: `rescueProgress`, `notebookProgress`, and "new today" from the Daily save. The CRT loops an order crawling to the robot with MAVEN's real one-way light time at Mars arrival (`signalDelay`, `countdown`). The mission map stays one click away ("Choose a mission").
+29. **Daily mission.** The same mission for everyone each UTC day. The seed is an FNV-1a hash of the date (with live weather, the date plus the sorted DONKI event ids of the day's real storms; rule 37), the number counts days since `DAILY_RULES.epoch` (game rule), and the craft is the Mars starter with the fixed extras (`dailyDesign`). The share card shows one row per danger answered: held, cost you or hurt (`dailyGrid`). It never says what was picked. It also shows the streak (`dailyStreak`) and the time to the next daily (`nextDailyIn_s`). COPY RESULT gives emoji text; SAVE IMAGE draws the card. Results are kept in the browser only.
+30. **Engineer's Notebook.** Lessons from `notebook.json`. Each one points at a real-history text that is already Sourced elsewhere in the data (hazards, crisis cards, rescue cases, lessons, or a rule's own source), and none are invented. A lesson opens when its deed is done: face a hazard, earn a star on a level, solve a rescue, or fly through a conjunction or eclipse season (`notebook`, `flightFacts`). The count is whatever the data holds. A flight's newly opened lessons show as the Mission Report's NEW CARD and as NEW in the Notebook. Titles and plain-English bodies are game copy.
+31. **Storms come from the Sun.** Every flight frame carries the Sun: the centre of the heliocentric maps, and −r_earth(t) on the Earth-centred Moon map, where it is drawn on the map edge in its true direction. A solar storm (`stormFront`) is drawn as a wave from the Sun that leaves when the eruption is seen (`knownAt`) and reaches the craft at onset (`hazards.json` `warningLead_days` later), linear in time; the robot glows while the storm lasts. The wave is a drawing, not a CME speed model; its 60° width is a game estimate (`FLY_RULES.cmeWidth_deg`). The order pulse from Earth is labelled YOUR ORDER.
+32. **The robot talks** (the TRANSMISSIONS teletype). The player names the robot on the name screen (rule 38) or on Pack (saved in the browser). The robot's messages are data derived from the mission's own events and daily ledger (`robotMessages`), so they follow from (design, seed, action log) like everything else: launch, halfway, the arrival burn (its Δv and propellant), science on, eclipse seasons, conjunction start and end, a hazard's hit and outcome, lost instruments, safe mode, low battery (the first day of a brownout), the spare wheel, an empty tank, science milestones (a quarter, half, three quarters and all of the prime goal sent home; game rule), prime complete, the extension and the sign-off. **After an order lands, the robot replies with what it did** (`order-received`, sent when the command executes); when no order came in time it says what it chose itself (`acted-alone`); an order that lands after it already acted is too late. A ground decision (extend or end) is answered once it reaches the robot. **Routine status** (days to arrival, distance, fuel, data sent) comes at most once every `VOICE_RULES.statusEvery_days` = 10 days, on days 10, 20, 30 …, and only when nothing else was said in the 10 days before (game rule); event messages always come. Each message reaches Earth one light time after it was sent: t_received = t_sent + d(t_sent) / c, the same `newsArrival` as all news, and the teletype shows only what has arrived (`heardMessages`, `transmissionFeed`), with how long it took. Your orders print in red with where they are: being written, in flight, delivered with the reply inbound, delivered. In flight, an order's pulse crosses to the robot, then the reply's pulse crosses back, and nothing is known on Earth until it lands (the round trip, 2t). A lost craft's last words cite Opportunity's last data (`VOICE_RULES`, to verify). The words are templates with named slots (`sdWords` `VOICE`, `fill`), so a translation can move them; the voice is terse uppercase telemetry.
+33. **Moments and sound are presentation only.** The launch countdown (`countdownAt`, first flight of each level, holds the clock), the arrival and storm banners (`momentsSince`), the storm shake and the browser-made sound effects never change the simulation. **Sound** (`ui/sound.ts`, synthesised with Web Audio; no audio files) is one manager of one-shot cues and held loops. **Where it sounds:** the teletype clacks while text types (every `useTeletype`); the CRT hums on Home, Name Your Robot and in flight; radio static plays while an order or its reply crosses space (the feed's `in-flight` / `reply-inbound` orders) and the clock moves; a beep when an order reaches the robot and when its reply reaches Earth; a short two-tone alert when a danger card opens; the printer rattles while a downlinked picture prints (not under reduced motion). Nothing sounds before the player's first click, tap or key press (browser autoplay rules): the AudioContext is only made then, and a loop already held starts at that moment. A hidden tab pauses it. It is on at a low volume (master gain 0.08) unless muted; the mute key sits in every screen's top bar and is saved in the browser (`sd.sound`).
+34. **Postcards.** Real NASA pictures (public domain, NASA Image and Video Library ids, credits) in `postcards.json`, three per flyable destination. A flight earns a card when downlinked / science goal ≥ its `unlockAt` (first data, half, all; game rules), after the first data has arrived. Captions come from the NASA description; anything added from general knowledge is marked to verify.
+35. **Ranks and badges.** Ranks are named after real Mission Control jobs (`ranks.json`, job descriptions Sourced and marked to verify) and rise with the best stars per level (`starTotals`, `rankFor`; thresholds are game rules). Badges are deeds: Notebook flight facts (a storm with no instrument lost, an eclipse season with no brownout, an extension, a sample home, a conjunction), a full set of one destination’s postcards, a Daily streak, a rescue, the Jupiter lesson. The report announces what a flight earned against the crew file at launch.
+36. **Mars right now.** Home shows today's Earth–Mars distance, the one-way light time d / c and the next solar conjunction (the window when the Sun is within the 2° commanding threshold of Mars, and its closest day), from `marsNow(today)`: the same JPL approximate elements and `bodyConjunctions` the flights use, with no API call. While a window is open it says the Sun is in the way until the window's end. Validation: the closest day of the Jan 2026 conjunction falls inside NASA's published commanding pause (Dec 29, 2025 – Jan 16, 2026).
+37. **The Daily's real Sun.** The browser never calls NASA. The Pages build (`pages.yml`: every deploy, and daily at 00:20 UTC; GitHub may start it hours late) fetches DONKI flares (FLR), CMEs and solar energetic particle events (SEP) for the 7 whole UTC days before today from the CCMC DONKI-API (`spaceWeather.json` `donki.apiBase`, Sourced to CCMC's announcement; no key) and publishes `data/donki-latest.json` with the site, never committing it (CCMC down → the live snapshot is kept); the game reads only that file (`ui/donki.ts`). Dangers (`realStorms`): **an SEP is a solar radiation storm** (the `solar-storm` hazard, whose seeded rate is NOAA's S3/S4 radiation-storm count), struck at its replayed event time, warned `warningLead_days` before (DONKI logs an SEP once per instrument or energy channel, so SEP records linked to the same flare, or else the same CME, are one storm at the earliest time; the recorded May 2024 week has 14 records and 4 storms); **a CME is a danger only when NASA's WSA-ENLIL model predicts it reaches Mars**: the latest ENLIL run (by model completion) of the CME's most-accurate analysis with a Mars entry in `impactList` gives the arrival time, so the `cme-shock` card is warned at the replayed eruption and strikes the real eruption-to-arrival transit later ("arrives in" is that transit, unscaled), and its severity scales every response's failure chance: direct hit ×1, `isGlancingBlow` ×0.5, `isMinorImpact` ×0.25 (game estimates; both flags → the smaller). Impacts at other tracked locations (Psyche, OSIRIS-APEX, Europa Clipper, Juice) are kept for future levels. **Flares are never dangers**: a flare DONKI links to an SEP or CME (from either side) is named on that card. The 4 most severe dangers are kept (ties: earlier first), in time order. The real week is replayed across the flight: the event time maps to cruise start + f × (prime end − cruise start), f its place in the week; an onset on launch or the arrival burn moves to the next day the hazard can strike (a CME's warning moves with it). Real dangers replace only the solar-storm and CME-shock streams (always accepted; outcome draws from those streams); `cme-shock` is live-only (`liveOnly`: no seeded rate, not in Pack's danger deck). The card reads DANGER CARD · REAL SUN; ⓘ on the event is the DONKI observation (`stormSourced`), and ⓘ on "danger arrives" is the ENLIL arrival, labelled "NASA WSA-ENLIL model prediction", not an observation (`predictionSourced`). Missing, unreadable, slow (`loadTimeout_ms`) or stale (window ended more than `maxAge_days` = 2 days ago) → offline: the seeded Daily, labelled "offline — simulated weather" on Home, in the briefing and on the share card. A good snapshot is kept in the browser for the day.
+38. **Name Your Robot.** Before the first Cadet mission (or Daily), a Cadet who has neither named the robot nor skipped the screen names it on its own screen (design screen 00): at most 12 characters, capitals, digits, spaces and dashes (`cleanRobotName`, applied again when the saved name is read). Its first words come back with no delay, because it is still on the pad: the last time there is none. TODAY'S SKY gives today's Mars light time from `marsNow` (rule 36). SKIP keeps the default name; the Pack name tag can rename it later. Engineer mode is never sent through it.
+39. **Science Targets** (design screen 01, SCIENCE TARGETS). After the arrival burn the robot says "{name} IS IN MARS ORBIT. WHAT SHOULD IT LOOK AT?" in TRANSMISSIONS (`VoiceKind 'targets'`), and the CRT turns to Mars: the globe, six target cards (what we learn, image quality, fuel and battery chips on the five-segment scale, "⚠ risk"), and OBSERVE ▸ with a line saying how long the order takes to arrive or why it cannot be sent (queued, memory full, fuel, battery). Every number comes from `scienceTargetsView`. **Layout (v0.9):** the Mars globe fills the CRT (rule 41), the targets are a slim list beside it (the selected one opens to show what it teaches), TRANSMISSIONS stays on the right and OBSERVE runs along the bottom; on the phone the globe fills the width and the targets are a swipeable bottom sheet over it (peek: the selected target; half; full), with OBSERVE below. The panel holds the clock while open, **except that each OBSERVE order plays its trip** (v0.9): it crosses space at light speed (a strip over the globe counts it down, from the console's commands), the orbiter sweeps over the target when it lands, and the robot's reply ("ORDER RECEIVED. … IMAGE QUEUED.") reaches TRANSMISSIONS one light time later; then the hold applies again. Several orders can be on their way at once. DONE · KEEP FLYING (or SKIP SCIENCE) resumes the clock at the chosen speed, and SCIENCE reopens the panel during the science phase.
+40. **Downlink drawer** (design screen 01, DOWNLINK). A drawer on the TRANSMISSIONS paper: the queue (waiting, coming down with its percentage, home), the next DSN pass, then each picture printed line by line as a dithered teletype print, opened in full colour with its credit and the robot's comment. SKIP TO PASS advances the clock to the next pass. Numbers from `downlinkView` and `printProgress`. Reduced motion shows the picture whole.
+41. **Mars globe** (`docs/design/3d/`). The only 3D element in the game: a three.js globe in the CRT, textured with a real NASA Mars map (Sourced in `targets.json`), in true rust and ochre, with green graticule, orbit ring and target markers and the CRT scanlines. Loaded on demand. A 2D globe (the same map drawn orthographically) is used when WebGL fails, on low-end devices or when the frame rate drops, and a 2D/3D toggle is saved in the browser. Fly & Survive keeps its 2D map; there is no 3D orbit view. **The hero of Science Targets (v0.9):**
+   - It fills the CRT. Picking a target (its row or its marker) eases the camera to it in about a second: surface targets face on, the limb on the edge, a moon framed with its ring.
+   - The robot's orbit is drawn from the engine's (`scienceTargetsView.orbit`) on a compressed altitude scale (`sdGeometry` `orbitDrawRadius`, so a dip of tens of km shows and Deimos still fits); every label gives the real km, and the screen says ALTITUDES NOT TO SCALE.
+   - A target whose observing pass flies lower (`dips`) bends the ring down to that periapsis, with the low arc tinted by the drag-heating risk from the hazard model (`risk`, `riskLevel`); the label reads "⚠ DRAG …" and "PERIAPSIS from → to", and Engineer mode adds P(drag heating) and ρ/ρ₀.
+   - Phobos and Deimos show the orbit-change path out to the moon and back (`moonTransfer`, `pass.apoapsis_m`), with "APOAPSIS from → to".
+   - When an OBSERVE order lands (engine moment `observe`), the orbiter sweeps over the target with a scan-line flash (a single still frame under reduced motion).
+   - The flat globe has the same layout, drawing and interactions without camera motion: picking a target re-centres it at once.
+42. **Arrival transition** (presentation only, about 2 s, ease-in-out). When the arrival news reaches Earth, the map zooms into Mars while the rest fades; the flat Mars dot crossfades into the globe at the same place and size (the large globe's disc at its overview); the camera eases back while the orbit ring and markers appear one by one and the robot's question types out. Going back to the map plays it in reverse. Reduced motion cuts instantly. The 2D globe gets the same zoom and fade. Once it has landed, the camera eases on to the selected target (rule 41).
+43. **Mission Album** (design screen 03). The report opens with the album: "n OF N TARGETS RETURNED · p% OF MISSION SCIENCE", where N is the level's target count, 6 at Mars and 4 on Moon 3 (or "n IMAGES MADE IT HOME" when the robot was lost), a science bar with one block per target sized by its weight, and a frame per target (the picture in colour, SIGNAL LOST, or NOT RETURNED with why). FEED THE PAPER leads to the FINAL TRANSMISSION, then the comic. Numbers from `missionAlbum`.
+44. **One globe for Mars and the Moon** (v1.0). The globe of rule 41 is one component fed by a body record from the engine: texture, prime-meridian offset, radius, view, zoom table and credit. Mars is unchanged. The Moon texture is NASA SVS's CGI Moon Kit (the LROC WAC mosaic), Sourced with its credit. The 2D fallback, the 2D/3D toggle and the arrival transition (rule 42) are shared.
+45. **The Moon scene** (design `3d/Moon Globe.html`).
+    - **Earth:** it sits over the near side in the engine's direction, at a shortened distance. A // break marks the signal line, and the screen says NOT TO SCALE · // EARTH DISTANCE SHORTENED.
+    - **The ring:** solid where Earth can see the craft and dashed behind the Moon (arcs from the engine).
+    - **The link:** the signal line is solid while linked and broken while not. The HUD reads LINK · LOCKED · 1.3 S or LINK · LOST · FAR SIDE, and the far arc's label gives the minutes lost per orbit.
+    - **The orbiter:** its run around the ring is a sped-up drawing, but whether it is linked comes from the engine (`linkUpAt`).
+    - **The view** (v1.0, built): the engine gives everything in the Moon's body frame (`moonOrbitView`): Earth's direction, the Sun's, the orbit plane now, the far-side and shadow arcs (the same cylinder test as the physics, on the true orbit radius), a polar pass over each Moon 3 target, the link and the next trim burns. The orbit is fixed in space while the Moon turns under it, so the overview looks at the ring 55° off face-on from the side, following the plane through the month; the near half lies on Earth's side and the dashed far half away from it. The globe is lit by the real Sun, with a glow left on the night side so the map still reads.
+    - **A legend, not ring labels:** the far side (minutes lost per orbit), the shadow (minutes on battery per orbit) and the trim burns (when, and the pair's Δv) are a small legend keyed to the ring's dashes, beads and diamond. On the ring they crowded each other and the targets, worst on a phone. Earth keeps its label until a target is picked.
+46. **The Moon levels' orbit panel.** When the craft arrives on Moon 1 or Moon 2, the globe opens without target cards:
+    - Moon 1 shows the shadow arc and the eclipse minutes per orbit, which the battery has to cover.
+    - Moon 2 adds the station-keeping tag on the ring: the next trim burn and its Δv.
+    - DONE · KEEP FLYING resumes the clock.
+
+    Moon 3 opens the four target cards (rule 39) on the same scene. The far-side target's card says the robot will observe alone.
+
+    The panel opens when the robot's first news from the science orbit reaches Earth: NEXT EVENT stops there (`nextEventT`), as it does for the Mars question. MOON ORBIT on the action bar reopens it.
+47. **Cold open** (first launch only). A new player (Cadet; no robot name; neither the name screen nor the cold open seen) first sees a blinking cursor on black and one key, ▶ RECEIVE TRANSMISSION: the tap lets the sound start (browsers allow audio only after an interaction). Under reduced motion with the sound muted there is nothing for the tap to start, so the gate is skipped. After the tap, a teletype, about 15 s:
+    - "SEPTEMBER 23, 1999 · MARS CLIMATE ORBITER · ORBIT INSERTION BURN";
+    - "SIGNAL EXPECTED WHEN IT COMES OUT FROM BEHIND MARS" (no waiting time is claimed);
+    - a wait on a flat trace with radio static;
+    - "— NO SIGNAL —";
+    - then a second screen: "ONE TEAM USED POUNDS. THE OTHER, NEWTONS." and "EVERY ORDER YOU SEND ARRIVES LATE. MAKE IT COUNT.", credited to the MCO Mishap Investigation Board Phase I Report.
+
+    The facts come only from the MCO rescue case (`coldOpenFacts`):
+    - the arrival date and craft from the press kit;
+    - the insertion burn from the main engine's press-kit entry;
+    - the signal due from behind Mars from NSSDCA's news of Sept. 23, 1999 (the burn took MCO behind Mars as planned; contact was to come back when it reappeared);
+    - the loss from NASA Science;
+    - the units from the board's root cause (the AMD file in lbf·s, read as N·s).
+
+    It goes on to Name Your Robot (rule 38), then Home. SKIP (and Esc) is always on screen and is remembered (`sd.seen` `cold-open`). INTRO on Home's second row replays it and returns Home. Reduced motion prints each line whole and holds every beat 0.6 s (under 4 s in all). The beat holds are presentation constants (`COLD_OPEN_HOLD_MS`).
+
+48. **EN / বাংলা** (v1.1). Every top bar has an EN / বাংলা switch, beside the sound key; the choice is saved in the browser (`sd.lang`) and switches the words at once, without restarting what is on screen (a flight keeps flying).
+    - **Words only.** Every number is formatted the same way in both languages (Latin digits). Symbol units stay as they are (km, kg, m/s, s, min, W); the time words in sentences ("30 hours", "in 3 days") are said in Bangla from the same rounded number (`format.ts` `durationParts`), and dates use Bangla month names with Latin digits. NASA mission names, science target names, robot names and the game's name stay in English; planet names are said in Bangla, with Bangla's case endings (মঙ্গলে, চাঁদের).
+    - **Where the words live.** Each export of `sdWords.ts` has its Bangla in `sdWords.bn.ts` (`BN`), and each of `opsWords.ts` (the console drawers and the event feed) in `BN_OPS`, with the same shape; the compiler and a test check that no word is missing, that every Bangla string is written in Bangla and that none uses Bengali digits. The screens' own words (Home, Pack, Fly, the drawers, the Report, the Notebook, the Daily) were moved into these files; a screen never writes a word itself.
+    - **The engine's English.** The data and the engine stay English. The danger cards say the engine's hazard titles and questions in Bangla at the words layer (by hazard type). The engine's plain-language blockers, the Engineer Build Bay and Engineer readouts (equations and raw values) stay in English.
+    - **Cited texts** (v1.2). The data's cited texts are shown in Bangla: real history, a target's "what we learn", postcard titles and captions, Rescue History's clues and the failure report's findings, the Jupiter lesson, rank jobs and the Notebook's rule citations. Their Bangla lives in the UI (`cited.bn.ts`), keyed by the exact English, so the data stays English and Sourced. ⓘ speaks Bangla but keeps the record as it is: it shows the English original (labelled মূল লেখা (ইংরেজি)), its source and its link; the "to verify" tag stays wherever it was. The Bangla keeps every number of the English, and a test fails on a cited text with no Bangla. A real DONKI storm card says what was observed in the player's language.
+    - **Rescue History and the mission map** are in Bangla; mission names stay English.
+    - **Level titles** stay in English in both languages. In Bangla a subtitle under the title says what the level teaches (যা শিখবে: শক্তি) on Home's PLAY key; the mission map and the briefing say it too.
+    - **Type.** Hind Siliguri carries the Bangla letters: the browser falls back to it glyph by glyph, so digits and Latin keep the game fonts. Bangla has no capitals and its letters join, so the wide letter-spacing of the uppercase labels is turned off in Bangla.
+    - **Layout.** Bangla runs longer than English. Every Bangla screen is shot at 1440 × 900 and 390 × 844, and a page that scrolls sideways fails the shot.
+
+49. **Team Setup and the Mission Objective** (v1.3; design `Signal Delay - Team Setup.dc.html`, screens T1 and T2). Home's TEAM key opens Team Setup:
+    - SOLO or TEAM, the number of players, each seat's call sign (a tap steps to the next free one), and the four role cards with HELD BY (a tap hands the role on).
+    - A CRT line says who holds two roles, or who has none yet (NEXT waits).
+    - The online room is shown but off ("coming later").
+    - NEXT · OBJECTIVE starts the team's log with the setup entry. On the Mission Objective screen the Flight Director picks one of three cards (pictures of its targets, each target's share of the science, the parts that make it count, the role it leans on); the other roles AGREE or OBJECT; the lock key reads WAITING FOR VOTES, LOCK OBJECTIVE or OVERRULE · FINAL CALL; once locked, NEXT · PACK opens the Mars Pack flying that objective.
+    - The crew is saved in the browser (`sd.team`). Seats are told apart by a badge colour and their call sign; role colours follow the mockup.
+    - Every count and rule on these screens comes from the engine (`crewView`, `objectiveCards`, `objectiveVote`).
+
+50. **Team Pack** (v1.3; design `Signal Delay - Team Play.dc.html`, screen T3). The team's Mars Pack is the same Pack with a team layer:
+    - Every packing is a team log entry made as the part's role. A packing refused for lack of room still goes on the log, since it raises the space conflict.
+    - The shelf is grouped by role, with each role's cost and mass, and the nose parts wear their role's colour.
+    - SHARED LIMITS replaces the Danger Deck: one bar per limit, split by role, and a table of each role's mass, cost and share of the cost (`teamSpend`, `spendShares`).
+    - Over the mass or the budget (or out of room), a red banner over the nose names the limit, by how much, and the roles that have to talk.
+    - The TEAM LINE shows the preset messages so far; SPEAKING AS picks the role a quick message speaks for. There is no text input.
+    - LAUNCH sends the Flight Director's launch entry with the launch day, then flies.
+
+51. **Team Fly** (v1.3; design `Signal Delay - Team Play.dc.html`, screen T4). The team's flight is the same Fly & Survive with a team layer:
+    - **A danger card is a vote.** WHOSE DECISION across the top shows the three steps: 1 RECOMMEND (the related role, `team.json` `hazardRoles`), 2 VOTE (all the other roles), 3 FINAL CALL (the Flight Director). The clock stays held until the vote settles.
+    - Step 1: the recommending role taps a card. The card's band then says who recommended which choice ("RECOMMENDED BY COMMS & OPS · PULSAR / A · SHIELD UP").
+    - Step 2: each choice shows its votes and a token for every seat but the Flight Director's (a seat holding two roles has one token naming both). A seat taps its token on the choice it wants, once. The recommender's token sits on its recommendation.
+    - Step 3: the FINAL CALL box (the footer on a desktop, under the choices on a phone) says which way the team leans and how many votes are still out. The Flight Director taps a card; that is the call. The Flight Director may call before every vote is in.
+    - A team of one sees only RECOMMEND ("YOUR CALL"): the recommendation is the call. With no Flight Director (not reachable from Team Setup, which hands every role out), the majority settles the card.
+    - Only the settled choice is sent to the robot; then the order plays its trip as in solo play. LET THE ROBOT DECIDE stays: the robot's default at the deadline, as in solo play.
+    - Where the vote stands comes from the engine (`cardVote`: stage, recommender, voters and their voices, tally, which way the team leans, votes still out); the option letters are words (A, B, C; ক, খ, গ in Bangla).
+    - **Every console order goes on the team's log** as its role (`opRole`): the power plan as the Engineer, OBSERVE as the Science Lead, DSN bookings as Comms & Ops, the extension as the Flight Director. Each console key wears its role's colour, and its tooltip names the role.
+    - **The quick messages** replace the COMING UP ribbon (desktop footer; phone: the bottom panel, and inside a danger card). They are sent at the mission time.
+    - **TRANSMISSIONS** prints the team's lines in time order with the robot's (`teamFlightLines`, `withTeamLines`), each marked with its role: the quick messages, RECOMMEND, VOTE and FINAL CALL with the option's name.
+    - A team flight is not saved for resume in the browser: the team's log is the record. Leaving the flight and coming back flies on from the log.
+
+52. **Team Debrief** (v1.3; design `Signal Delay - Team Play.dc.html`, screen T5). A team's Mission Report gets the **TEAM DEBRIEF** after the Mission Album and before FINAL TRANSMISSION (desktop: the album's FEED THE PAPER brings it, and its NEXT · FINAL TRANSMISSION brings the robot's last message; phone: one after the other on the sheet, NEXT scrolls on). A solo flight has none.
+    - The head: the crew size and the locked objective, and how many danger cards the team voted on.
+    - One row per role, in role order, in the role's colour: the role and the call sign that held it; the key decision (a kicker such as "DAY 063 · RADIATION STORM" and the call: "RECOMMENDED SHIELD UP. TEAM AGREED 2–0.", "LOCKED “STUDY THE ATMOSPHERE”." with "OVER AN OBJECTION" when it was overruled); its effect; and a stamp from the row's verdict (OBJECTIVE MET / MISSED, GOOD CALL / COSTLY CALL, ALL / SOME / NONE HOME, MORE DATA, WORTH IT / NOT NEEDED, NO CALL). The phone row stacks the role, the stamp, the call and the effect.
+    - **TEAM SCORE** out of 100 (`teamReport` `score`) with its parts (`parts`, `teamScoreParts`: AGREEMENTS, CONFLICTS SOLVED, OBJECTIVE MET), each with its points out of its weight, one pip per card, conflict or objective, and its line ("1 OF 1 CALLS WENT WITH THE RECOMMENDATION", "NO BUDGET FIGHTS", "STUDY THE ATMOSPHERE · MISSED"). The phone shows the score and the three parts in a row of tiles. The note under it says the team score never changes the stars.
+    - Every count, point and verdict comes from the engine (`team/report.ts`); the words are `TEAM_REPORT_WORDS`, with Bangla.
+
+53. **Online room: the host screen** (v1.4; design `Signal Delay - Online Room.dc.html`, screens T6a and T7a). Team Setup's ONLINE ROOM key (a team only) and NEXT · OPEN ROOM open the room: the room code large on the CRT with the three steps (open the game on a phone, JOIN, pick a role), the four role slots (waiting, a call sign joined on a phone, reconnecting with its hold countdown, held by another), the CRT line (who is missing, who will hold the empty roles) and START MISSION, lit once a Flight Director has joined. RESUME A MISSION ▸ takes a resume code. With no relay: OFFLINE, RETRY with its countdown, and PLAY LOCAL CO-OP. After the start the host screen is the usual Objective → Pack → Fly → Report: the objective lock and the Flight Director's launch on a phone move it on by itself; a room chip sits at the bottom; a dropped phone opens RECONNECTING (the bar runs down; HAND <ROLE> TO <SIGN>), then ROLE HANDED with RESUME. The host screen's own keys still work (they act as the role's holder, as on a shared screen). FLY AGAIN in a room goes Home, which ends the room.
+54. **Online room: joining on a phone** (v1.4; screens T6b and T7e). Home's JOIN key (or a `#join=CODE` link) opens JOIN A ROOM: the code in eight boxes, then the four roles (free, taken by a call sign, or ▸ YOU) and JOIN AS <ROLE>. There is no name field (the mockup's is left out): the host gives the phone its call sign. With no relay the phone says so and offers local co-op.
+55. **Online room: the phone controller** (v1.4; screens T6c–f, T7b–d). The phone shows only its own role(s), under a band in the role's colour (YOU ARE · <SIGN>): the waiting room (the crew, WAITING FOR THE FLIGHT DIRECTOR TO START, CHANGE ROLE, LEAVE ROOM); the objective (the Flight Director picks and locks; the others agree or object); packing (the role's own parts, the shared limits; the Flight Director's LAUNCH on the best day); the flight: the turn strip with one dot per role (`cardTurn`), the card's danger and recommendation, then the role's panel. The Flight Director: the objective, MISSION ENDS IN, the team's votes with their tokens and FINAL CALL; the Engineer: the four tiles; the Science Lead: the targets with OBSERVE; Comms & Ops: the next DSN pass, the one-way light time, the orders on their way and BOOK THE BIG DISH. The recommender and voters get their choice keys. Then the report (TEAM DEBRIEF). SIGNAL LOST holds the role while the phone reconnects; THE HOST SCREEN CLOSED shows the resume code with COPY. Every number comes from the engine (`team/controller.ts`, the console's views).
+56. **Solo objective** (v1.5; Mission objectives). On a level that asks for one (Red Planet only; `levels.ts` `objective`), a solo Cadet picks the mission objective in the MISSION BRIEFING: PICK YOUR OBJECTIVE, three cards (title, one line, NEEDS <parts>, ✓ ON BOARD when the packed craft already carries one, from `objectiveCards`). The pick is required: START reads PICK ONE TO START until one is picked, Escape does not skip it, and ◂ BACK leaves the level. The briefing opens by itself whenever the packing has no pick, even after it has been seen. Pack shows the objective plate (OBJECTIVE · title, NEEDS <parts>, ✓ ON BOARD or ✗ NOT PACKED, with a warning that the objective cannot be met without one, and CHANGE ▸ back to the briefing); the launch checklist starts with PICK AN OBJECTIVE. The pick sits on the level's design, so Launch Day, the flight and FLY AGAIN keep it. Each solo level's last packing (part ids, re-packed by the engine on load) and objective are saved in the browser (`sd.pack`), so opening the level again, even after a reload, resumes them; the launch-day pick is not kept, and team runs, the Daily and free builds are not saved. In flight MISSION INFO shows the objective flown, read-only. The Mission Album's head says MET or MISSED with the share of the objective's own science home, or that no part for it was on board (`objectiveResult`). Team and online flights pick on the Mission Objective screen (rule 49) and get no album line (their TEAM DEBRIEF has the row); the Daily, the Moon levels, Venus, Bennu, Jupiter and Engineer mode have no picker.
+57. **Mission limits** (v1.6). Solo Pack shows MISSION LIMITS: four bars, WEIGHT (wet mass against what the rocket lifts), BUDGET (development cost against the cap), POWER (needed on the worst day against available) and DATA (produced a day against what the dish sends a day), each fine, NEARLY FULL (margin under 10%) or OVER, from the meters (`pack.ts` `packLimits`). Hovering or focusing a shelf part previews every bar with that part packed (`packLimitsWith`, on the launch day), as a striped ghost with the new values. Desktop: the top of the right column, under the objective plate; phone: a 2 × 2 grid under the status line. Team Pack keeps its own shared limits (rule 50). **Over budget blocks launch** like too much weight (`PackBlockerCode` `over-budget`, OVER BUDGET: TAKE SOMETHING OUT), listed after the engine's own blockers. **Cloud Diver's budget** is a game rule, 350 $M of development (`pack.json` `levelBudgets.venus`, 70% of the 500 $M Discovery cap, labelled a game estimate), carried on the design (`Design.costCap`), so the cost meter, the budget score, the ⓘ and the blocker all read it: the starter (radar and spectrometer, ≈ 328.4 $M) is nearly full, and the camera on top (≈ 353.4 $M) is over until an instrument comes out. Every other level keeps NASA's cap and no full nose reaches it, so it binds nowhere else (Jupiter, already over, still leads with its engine blockers).
+58. **Choose the rocket** (v1.7). Solo Pack shows ROCKET: every launch vehicle (today the Atlas V 401 and 411, whose payload curves and prices are still placeholders, game estimates with the badge in ⓘ) and, on a level whose destination a shared ride goes to, that ride (the Moon: LRO's, `rideshares.json`). Each option says what it lifts to this mission's C3 (a ride: min(slot, m_LV(C3) − m_primary)), TOO HEAVY FOR IT when the craft is heavier, its effect on the budget and its flight record (`pack.ts` `rocketOptions`, `rocketCards`, `withRocket`). **Game rule:** a level's standard rocket (its starter's, `Design.standardRocketId`) is free; another rocket charges its price difference against the budget (`rocketCharge_M` = launch price − the standard's price; a ride's mass-share price can make it a refund). The cost meter, the budget score, the Ops budget reserve and the over-budget blocker read development + the charge (`details.cost.charged_M`); development cost itself, real missions and the Daily (no standard rocket) are unchanged. Picking changes the weight limit (the launch meter at the day's C3) and the budget bar; the pick is saved with the packing (`sd.pack` `rocket`). Desktop: the right column under MISSION LIMITS; phone: a grid under the bars. Team Pack keeps the standard rocket. Giant Leap still cannot launch: neither Atlas V lifts the Jupiter craft.
+59. **Choose the science orbit** (v1.8; Mars only). Solo Mars Pack shows SCIENCE ORBIT with three presets (`orbitPresets.ts`): **STAY WHERE YOU ARRIVE** (the capture orbit, 380 × 44,477 km: no burn), **MAVEN'S ORBIT** (150 × 6,300 km, MAVEN's published science orbit in `missions.json`, the starter's) and **HIGH ORBIT** (400 × 20,000 km, a game rule in `pack.json` `orbitPresets.high`, near Deimos' orbit). A pick changes only the science orbit's altitudes (its orientation stays), so `evaluateDesign` and Mission operations fly it with no new physics. Each card shows, from the engine (`orbitCards`): the orbit-change Δv (the budget's capture → science term), the Δv margin left (its status colours it), the round trip to Phobos and to Deimos (the OBSERVE order's own cost), the air drag at periapsis against MAVEN's nominal, and the longest shadow (the battery is sized for it), with one plain line on the trade. Each orbit wins something on seed 2013 with the safest answers: MAVEN's gives atmosphere 94% and surface ≈ 91% (Phobos close, Deimos refused for fuel); the high orbit gives moons 100% with the spectrometer and the extra tank (both moons) but atmosphere 90% and surface ≈ 85% (Phobos refused); staying put leaves the most fuel but only Deimos. A low orbit was left out: from the 380 km capture orbit it costs over 1 km/s and buys nothing, because pictures are taken on dips anyway. Desktop: the right column's ORBIT tab (with DANGERS and ROCKET tabs under MISSION LIMITS); phone: stacked under ROCKET. The pick is saved with the packing (`sd.pack` `orbit`). The Moon keeps LRO's orbit.
+60. **Change one thing and fly again** (v1.9). FLY AGAIN on a solo level returns to Pack with the packing, the objective, the rocket and the orbit in place (they live on the level's design and in `sd.pack`). MISSION LIMITS then opens with LAST FLIGHT: the last flight's stars and its science home (`scienceReturned`), and on each bar a tick where it stood last time and the change since (`pack.ts` `limitChanges`: what is used, and the limit when the rocket changed). The last flight is kept for the session, per level. The Mission Report's "what hurt you" adds NEXT TIME: PACK THE <PART> when a danger card went badly and an unpacked part on the level's shelf guards against it (its hazard factor) or covers it on the danger deck (`ops/report.ts` `packHint`; the design records its packed parts, `Design.packedParts`). Teams, the Daily and real missions get neither.
+61. **Level link** (v1.9). `?play=<level id>` in the address opens that level's Pack straight away, whatever is unlocked (after Name Your Robot for a brand-new player; the cold open is skipped), and changes no saved progress; an unknown id is ignored. With `?seed=N` the flight is fixed. The README's judge route uses `?play=mars&seed=2013`, whose first danger card (a solar storm) comes early.
+62. **Space Kids** (v1.9; Home's SPACE KIDS key beside the Cadet / Engineer lever, `screens/KidsMode.tsx`, engine `kids.ts`). Cadet's loop for children of about four to ten, on the same engine and with no new physics; only the questions are fewer. No gauge, no number on the way, very short lines spoken by the robot.
+    - **Where:** the Moon or Mars, as two real NASA photos (`postcards.json`). The craft is the destination's Cadet starter.
+    - **Pack:** four big parts from Cadet's shelf (`kidsShelf`: Moon camera, solar panel, battery, dish; Mars camera, solar panel, battery, shield), packed into the real nose (`kidsPack` → `initialPack` / `packPart` / `buildPackDesign`, blockers from `packBlockers`). LIFT OFF waits until nothing blocks; the part that clears every blocker shines (`need`). Every mix with the camera flies (tested).
+    - **Fly:** the real Mission operations from the flight's seed, moved on at most `KIDS_RULES.step_days` (8, game rule) a beat while the rocket glides from Earth to the destination (`kidsStep`, `kidsFlightView`: `missionProgress` and the phase). The child answers at most `KIDS_RULES.maxCards` (2, game rule) danger cards, each as BE CAREFUL (the safest response) or KEEP GOING (the response with the highest failure chance); the robot answers any others with its default response. At Mars, once in the science orbit, the child picks up to `KIDS_RULES.maxPhotos` (3, game rule) of the targets the robot can observe now; each is an OBSERVE order. The prime mission ends the flight (no extension).
+    - **Report:** the stars are the real flight's (`operationsDebrief`, STAR_RULES) but never fewer than `KIDS_RULES.minStars` (1, game rule), so no flight ends as a failure (a lost robot says so gently); the Mars pictures that came home; a kid-shelf part to try next time (`packHint`); and the real NASA facts (`kidsTrip`: the distance, a radio hello's light time, MAVEN's trip). Nothing is saved: stars, badges and postcards are Cadet's.
+
+## Decision log
+
+| # | Date | Decision |
+| --- | --- | --- |
+| 1 | Oct 3, 2026 | **Toolchain** in `.venv` (Node via nodeenv). Values the spec marks approx./to verify are kept but flagged `isGameEstimate`, and are listed in `TODO_DATA.md`. |
+| 2 | Oct 3, 2026 | **Real-mission presets** use published as-built dry mass; the 30% growth margin is for concept designs only. |
+| 3 | Oct 3, 2026 | **Atlas V curves** are placeholder estimates: the NASA LSP query tool cannot be exported by script. |
+| 4 | Oct 3, 2026 | **Δv budget** adds the capture→science orbit transfer (vis-viva) and a mission-lifetime reserve. |
+| 5 | Oct 3, 2026 | **No multi-revolution Lambert.** Direct transfers are capped at < 2 t_Hohmann. For Bennu, a fixed "NASA real route (Earth flyby)" uses the published C3 of 29.29678 km²/s², clearly labelled. |
+| 6 | Oct 3, 2026 | **Validation rows** are labelled validation, calibration or info. MAVEN power is calibration. |
+| 7 | Oct 3, 2026 | **Approved:** score on 0–100 (Σ wᵢsᵢ); game-estimate values for base risks, acceptable risk, budget fall-off and crisis outcomes, all labelled; the crisis simplification; the Bennu cap. |
+| 8 | Oct 3, 2026 | **MAVEN Δv reserve** uses the planned prime mission (1 Earth year), not the as-flown 4,094 days. Capture and science orbits come from NASAfacts: MAVEN Orbit Insertion (35 h, 380 km; 150 × 6,300 km, 4.5 h). |
+| 9 | Oct 3, 2026 | **Science goal** = Σ instrument data/day × planned science days, replacing per-destination goals. |
+| 10 | Oct 3, 2026 | **UI stack:** React + Vite, English only (no language toggle yet). Every tool and package is installed through `.venv` (venv Node and npm, pip into `.venv`), never globally. |
+| 11 | Oct 3, 2026 | **The engine computes every displayed number,** including part-card deltas, the real-mission comparison, the crisis preview and launch windows. The UI only formats units. |
+| 12 | Oct 3, 2026 | **No Reliability meter:** the mockup's Π Rᵢ reliability meter becomes the engine's Risk meter. The Debrief compares mass, power and Δv only (no cost or downlink rows). |
+| 13 | Oct 3, 2026 | **Score display** 0–100, with STRONG / FAIR / WEAK grades at 70 / 40 (game rule). **Flight bridge:** Build → Launch → one crisis card → Debrief until the Window and Flight screens exist. |
+| 14 | Oct 3, 2026 | **Launch window criterion:** minimum departure v∞ + arrival v∞. It finds the energy optimum, not a launch period's opening day. Validated: the 2013 optimum (Dec 6) lies inside MAVEN's published period (Nov 18 – Dec 7). |
+| 15 | Oct 3, 2026 | **Downlink caps daily science** through the uncalibrated link budget, so the science return figures carry a "game estimate" badge. |
+| 16 | Oct 3, 2026 | **Risk limit 20%** stays a labelled game estimate (no numeric NASA source found), shown on the meter. **Reliability → Risk** swap recorded with its reasons. |
+| 17 | Oct 3, 2026 | **Monte Carlo is seeded** (default 2013, shown on screen) for reproducible demos. |
+| 18 | Oct 4, 2026 | **Comms anchored to MRO** (DESCANSO Article 12: ≥500 kbps at 400 million km, 100 W, 3 m HGA). The ground term uses DSN 810-005 X-band gains (70 m 74.55 dBi, 34 m 68.24 dBi). The 34 m pairing is inferred and stays labelled. Close-range rates are optimistic (no coding or decoder caps). |
+| 19 | Oct 4, 2026 | **Cadet mode is a guided game** (UI rules 9–15); Engineer mode is unchanged. Cadet sizing targets are game estimates: lean 10%, balanced 25%, roomy 50% margin. Power is sized on the worse of arrival and end of science. One coin = 5% of the cost cap; one photo = an uncompressed 1024 × 1024, 8-bit frame (8.39 Mbit). |
+| 20 | Oct 4, 2026 | **Standing orders, not a new delay rule.** The craft follows the order queued before launch; light delay is shown with the real one-way and round-trip times but does not change any odds. |
+| 21 | Oct 4, 2026 | **Jupiter is the "impossible" lesson** with the two Atlas V curves: its star is for finding the launch failure in a Test Flight. The lesson card uses NASA Science: Juno (Earth flyby 26 months after the Aug. 5, 2011 launch; Jupiter on July 4, 2016). |
+| 22 | Oct 4, 2026 | **Rescue History: Mars Climate Orbiter.** Facts from the NASA/JPL MCO Arrival press kit (Sept. 1999) and the MCO Mishap Investigation Board Phase I Report (Nov. 10, 1999). Root cause: SM_FORCES / AMD file in lbf·s instead of N·s (factor 4.45). Planned periapsis 226 km, 80 km survivable, 57 km estimated. |
+| 23 | Oct 4, 2026 | **Ghost path is rotated** about the Sun to start beside the player (the real mission flew in another year), and is labelled so. |
+| 24 | Oct 4, 2026 | **Fix: free crisis options are always offered.** `availableOptions` dropped the free option when a spare margin was negative, so an over-budget craft (which may launch) crashed the flight on its crisis. Zero-cost options are now always payable. |
+| 25 | Oct 4, 2026 | **Moon transfer timing.** The Moon transfer path is sampled evenly in angle, so craft positions in cruise come from Kepler's equation in time. The fixed Bennu route and the trip home stay approximate (drawing and light delay only). |
+| 26 | Oct 4, 2026 | **Mission operations** is a separate engine entry point (`src/engine/ops/`) with no UI yet. In Ops the explicit hazards **replace** the generic cruise and science base rates. Launch keeps the Laplace reliability, and the insertion anomaly reuses `BASE_RISK.arrival × f(Δv margin)`. |
+| 27 | Oct 4, 2026 | **Extension report is separate:** the 0–100 score and the stars stay on the prime mission. |
+| 28 | Oct 4, 2026 | **Determinism:** the mission is (design, seed, command log). Each hazard has its own random stream, and everything is drawn at the start by Poisson thinning, so decisions change the odds but never reshuffle the future. |
+| 29 | Oct 4, 2026 | **Conjunction:** no commands and no downlink while the Sun–Earth–probe angle is < 2° (JPL, 2015). Validated against the published 2015, 2017 and 2019 Mars moratoria. |
+| 30 | Oct 4, 2026 | **Eclipse seasons** come from a science orbit fixed in inertial space (no J2 precession), oriented from the IAU pole. MAVEN's inclination is 75° (AAS 21-211); the default is polar (game estimate). |
+| 31 | Oct 4, 2026 | **Mars Ls** is computed from the NASA fact-sheet pole and the ephemeris. It is checked against Mars24's perihelion Ls = 251° and drives the dust-storm season. |
+| 32 | Oct 4, 2026 | **DSN fees** use the published aperture-fee formula (R_B = $1,057/h FY09, A_W 1 for 34 m and 4 for 70 m, 1 h set-up per pass). The default daily pass is inside the operations cost; only extras are charged. |
+| 33 | Oct 4, 2026 | **Space weather rate** from NOAA's S3 + S4 counts (13 per 11-year cycle), shaped by the published cycle 24 and 25 minima and maxima. Mars global dust storms average one per 3 Mars years (NASA). |
+| 34 | Oct 4, 2026 | **Risk meter = the Mission operations Monte Carlo** (500 runs, seed 2013, safest responses, prime mission only), shown with its run count, seed and standard error and flown in a Web Worker. No separate formula: `phaseRisks` stay only as the single-card flight's own model. Hazard rates are not tuned to match: MAVEN 4.0% ± 0.9 (Ops) vs 12.1% (old phase formula), as an info row. |
+| 35 | Oct 4, 2026 | **Power meter = the worst day of the prime mission**, eclipses included, from the same day-by-day profile Mission operations reads (`powerProfile.ts`). The arrival-day sunlit figure stays as `details.power.available_W` for the real-mission comparison. The Cadet battery gauge warns when the worst day is in an eclipse season. |
+| 36 | Oct 4, 2026 | **Battery sized by depth of discharge:** E_batt = t_ecl,max · P_load / DoD_max, at the heaviest science-day load, DoD_max = 30%. This is a game estimate from JPL D-101146 (Li-ion: more than 30,000 cycles at 30% DoD). Without this reserve the battery term would cap every eclipse day at about 0% margin. |
+| 37 | Oct 4, 2026 | **Stars and the Ops debrief score power on the worst day** (the Power meter), not on the last science day, so the band is judged on the margin the player sizes and sees. |
+| 38 | Oct 4, 2026 | **Moon rideshare:** LCROSS's secondary slot on LRO's Atlas V 401 (June 18, 2009). 1000 kg fuelled (NTRS 20100028203); LRO 1,850 kg (NASA Science). The limit is min(slot, m_LV(C3) − m_primary), and the price is a mass-proportional share (game rule). The user first chose "capacity − LRO", then switched to the sourced slot once the measured margins showed it alone puts Moon crafts in the band (16–41% vs 71–80%). No smaller rocket is invented. |
+| 39 | Oct 4, 2026 | **Fact sheets:** Venus, Jupiter and Moon values are copied from Internet Archive copies (Sept. 28 – Oct. 3, 2026) of the NSSDC fact sheets, because the live site refused connections; each source says so. The Moon pole stays flagged (not on the Moon fact sheet). |
+| 40 | Oct 4, 2026 | **Operations Console in both modes** (UI rules 16–20), from the Claude Design mockups. Cadet opens it from the Mars level on; Engineer opens it for any design that can launch. The view model is engine code (`ops/console.ts`) with display game rules: a 60-day Upcoming window, a 14-day conjunction warning, risk-bar bounds of 0.5 / 1 / 3 / 10% and an 8-event feed. |
+| 41 | Oct 4, 2026 | **Power dial = two handles + a radio switch.** The mockup's radio slice would need a radio power level the engine does not model, so the power plan keeps the radio on/off and no physics was added. |
+| 42 | Oct 4, 2026 | **Safe mode resumes by itself** (`pausedUntil`); the mockup's "Recover" button is replaced by the day science resumes. |
+| 43 | Oct 4, 2026 | **Ops sessions resume:** the action log and mission time are kept in the browser, and `replayOperations(design, opts, actions, until)` rebuilds the mission to that time. |
+| 44 | Oct 5, 2026 | **Renamed Signal Delay; UI rebuilt from the Claude Design "Signal Delay" screens** (rules 21–27). The design is the visual source of truth; its tokens live in `theme.css`. Screenshots at 1440 × 900 and 390 × 844 are compared with the design copies (`npm run shots`; Playwright installed in the venv). |
+| 45 | Oct 5, 2026 | **One flight model everywhere.** Both modes fly Fly & Survive (Mission operations) and end on the Mission Report. The crisis-card flight and the separate "Run mission operations" step are removed from the UI. |
+| 46 | Oct 5, 2026 | **Pack is a real mechanic** (user decision). Footprints, the 6 × 6 nose, part effects and coverage are labelled game rules. Real missions carry no kit, so validation is unchanged. Volume and weight are separate limits, and blockers name which one failed. |
+| 47 | Oct 5, 2026 | **Risk shows as an increase.** A choice's risk chip is the number of risk-bar steps above the hazard's safest response ("⚠ +n risk"), never a negative number. |
+| 48 | Oct 5, 2026 | **Star rules Sourced** (`STAR_RULES`: 3 phases for the first star, a science score of 70 for the second) instead of literals. |
+| 49 | Oct 5, 2026 | **Home, Daily and Notebook** (rules 28–30) complete the Signal Delay screens. Cadet opens on Home; the mission map stays one click away. The Daily turns over at UTC midnight from a Sourced epoch. |
+| 50 | Oct 5, 2026 | **The Notebook uses only existing Sourced texts** (user decision): 15 lessons point at hazard histories, crisis cards, the Mars Climate Orbiter case, the Juno lesson and the sources of the conjunction and battery rules. No lesson text is invented, and the collection is not a fixed 24. |
+| 51 | Oct 6, 2026 | **Solar storms come from the Sun on every map** (user report: on the Moon map the storm seemed to come from Earth, because the Sun was not drawn and only the order pulse moved). Rule 31. |
+| 52 | Oct 6, 2026 | **Reasons to care** (user request: players could not connect with the game): the robot gets a name and a light-delayed voice, big moments and sound, real NASA postcards, and ranks and badges (rules 32–35). All of it sits on engine output; nothing changes the simulation or the score. |
+| 53 | Oct 8, 2026 | **Live NASA data** (user request): Mars right now on Home from today's ephemeris (rule 36), and the Daily's solar storms from NASA DONKI (rule 37). DONKI left api.nasa.gov on Sept 30, 2026 for the CCMC DONKI-API (no key); its CORS is unknown, so a daily GitHub Action saves a static snapshot and the game never calls NASA. The real week is replayed across the flight (user choice), strong events only, at most 4 (user choice). Offline or stale → the seeded Daily, labelled. |
+| 54 | Oct 10, 2026 | **Which real events are dangers** (user decisions): radiation storms are SEP events, not flares; a CME counts only with a WSA-ENLIL predicted Mars arrival, which sets its warning time, and ENLIL's glancing / minor flags scale the failure chance (×0.5 / ×0.25, game estimates); flares are context on a linked card. SEP → the existing solar-storm hazard (retitled Solar radiation storm); CME → a new live-only CME shock hazard. In the first live week, the ≥ 1000 km/s CME rule had found no CME at all, while ENLIL predicted 11 Mars impacts. |
+| 55 | Oct 10, 2026 | **Nothing pushes to main** (user request, before protecting `main`): the daily snapshot is fetched inside the Pages build and published with the site instead of a daily bot commit; fixture recording is a manual workflow that opens a pull request and starts CI on it. `main` requires the "Typecheck and tests" check, for everyone. |
+| 56 | Oct 21, 2026 | **Vision stated** (user request): "Keep a robot you'll never touch alive, under the real sky, with words that arrive too late." It is the yardstick for new features. The Claude Design project added Name Your Robot (screen 00), the Fly & Survive teletype of transmissions and the Mission Report's final transmission; the copies are in `docs/design/signal-delay/`. The name screen is rule 38; the saved key stays `sd.robot` (the mockup's `sd.robotName` is not used), and the limit rises from 10 to the design's 12 characters. |
+| 57 | Oct 21, 2026 | **The robot's transmissions** (user request, rule 32): messages derived from existing events and the daily ledger, deterministic from (design, seed, action log); the robot replies to each order; routine status at most every 10 days (game rule); the TRANSMISSIONS teletype replaces the radio bubble (Claude Design). The Fly clock now plays the reply's trip home before an order's outcome shows: Earth cannot know what the robot did until its reply arrives. Words are Bangla-ready templates with named slots. |
+| 58 | Oct 21, 2026 | **Final transmission** (user request; Claude Design screen 03): the report opens with the robot's last message, built by the engine from the report verdict and the mission, with complete, lost and extended endings. It replaces the separate last-message note (kept only for a robot that never flew). |
+| 59 | Oct 21, 2026 | **Home: two big keys** (user request): PLAY and DAILY are primary; Rescue History, Notebook, Postcards (not named in the request, grouped with them) and Engineer mode move to a smaller second row. No design for this yet; it reuses the Home key styles. |
+| 60 | Oct 21, 2026 | **Launch Day is its own step** (user request and choice): Pack shows the launch day in one line and flies on the best day (`bestLaunchDay`) unless the player picks another on the LAUNCH DAY step (CHANGE ▸). Engineer mode builds in the Build Bay, which sets its own dates; flipping the lever on the Launch Day step shows its Engineer numbers. |
+| 61 | Oct 23, 2026 | **Vision, second line** (user request): "Keep it alive long enough to bring the science home." It sits under the first line, with the bullet "Bring the science home". |
+| 62 | Oct 23, 2026 | **Mars science targets** (user request; Claude Design screen 01): six targets with Sourced locations, lessons, game-estimate weights and verified NASA images. Costs come from existing physics (vis-viva orbit changes, a MAVEN-fitted exponential upper atmosphere for drag, imaging power, the link budget and DSN passes); risk runs through the hazard model; OBSERVE uses the light-delayed command path. Other destinations keep data-downlinked science until they have targets. |
+| 63 | Oct 23, 2026 | **Science returned is the main score** (user request and choice): Mars science = Σ weights of targets home; stars are first science home, ≥ 50%, ≥ 80% (game rules); the Daily share and the report headline use it. Pictures already home count after a loss. The weighted total stays in Engineer mode. |
+| 64 | Oct 23, 2026 | **Cadet Mars run about five minutes at 100×** (user request): the Cadet Mars level flies a shorter prime science campaign (`cadetCampaign_days`, game rule set by a run-length test); Engineer mode and MAVEN are unchanged. |
+| 65 | Oct 23, 2026 | **Mars globe in three.js** (user request; Claude Design 3D project): the only 3D element, with a real NASA texture instead of the mockup's procedural map, a 2D fallback and a 2D/3D toggle, loaded as a separate chunk. Its frame rate is checked on a throttled phone profile. |
+| 66 | Oct 23, 2026 | **Arrival transition and Mission Album** (user request; Claude Design screens 01 and 03): a 2 s map-to-globe zoom (instant under reduced motion), and the report opens with the album before the final transmission and the comic. |
+| 67 | Oct 23, 2026 | **Copy fix:** Olympus Mons is about 2.5 times taller than Everest (21.9 km vs 8.85 km, both Sourced), not "two and a half times" from the mockup without a source. |
+| 68 | Oct 23, 2026 | **Science targets in Ops** (spec section Science targets and downlink): OBSERVE is a command kind; refused orders cost nothing; the drag-heating hazard (`science: true`, not in Pack's deck) is its own stream, so observing never reshuffles other draws. Pictures take the head of each day's pass; routine data gets what is left. At Mars the robot's science-phase line becomes the targets question and data milestones give way to a line per picture sent. The extension review stays on data (decision above). |
+| 69 | Oct 24, 2026 | **The Mars globe is the hero of Science Targets** (user request; Claude Design "Mars Globe", no new design file): the globe fills the CRT, with a slim target list and a phone bottom sheet. Picking a target moves the camera to it. The orbit is drawn on a compressed altitude scale with real-km labels (the user's choice: at true scale the 150 → 125 km deep dip is under 1% of Mars' radius). An OBSERVE order plays its light-time trip and the robot's reply while the panel is open, so the player sees it land; otherwise the panel still holds the clock (the user's choice; amends rule 39). The robot's acknowledgement now says IMAGE QUEUED. |
+| 70 | Oct 27, 2026 | **Moon globe and Moon targets** (user request; Claude Design "Moon Globe", copied into `docs/design/3d/`). One globe component serves Mars and the Moon. Moon 3 is scored by four targets with the Mars rules. Moon 1 and Moon 2 show the globe and orbit only, and keep the data ratio. |
+| 71 | Oct 27, 2026 | **Far-side loss of signal from geometry** (user request). It is the eclipse test with Earth's direction in place of the Sun's. Earth's direction comes from the IAU rotation angle, with the periodic terms left out (game simplification). Orders wait for the link instead of being refused. The downlink is scaled by each day's visible fraction. |
+| 72 | Oct 27, 2026 | **Lunar station-keeping from LRO's published plan** (user request; Beckman & Lamb, NTRS 20080012683). A burn pair of 10.81 m/s every sidereal period, inside the 50 ± 20 km band, checked against the 150 m/s per year allocation. The burns show on the ring. |
+| 73 | Oct 27, 2026 | **The Moon levels fly LRO's 50 km circular polar orbit**, replacing the 50 × 1,800 km capture orbit, so the globe and the physics agree. |
+| 74 | Oct 27, 2026 | **Moon pictures from the PDS** (user's choice). LROC website images are copyrighted by ASU (educational use is allowed with credit), while PDS products are public domain. So the game crops PDS frames, credited NASA/GSFC/Arizona State University. |
+| 75 | Oct 27, 2026 | **Shackleton at the IAU Gazetteer centre** (user's choice), 89.67°S 129.78°E (Feature 5450), not the mockup's 89.9°S 0°. |
+| 76 | Oct 27, 2026 | **Moon texture: NASA SVS CGI Moon Kit** (user's choice; svs.gsfc.nasa.gov/4720, the LROC WAC Hapke-normalised mosaic), not the mockup's procedural `moon-map.js`. |
+| 77 | Oct 27, 2026 | **Moon target pictures** (verified on their catalogue pages): Apollo 11 M175124932R, Tycho M162350671L/R (the same frame as NASA SVS 4220), Tsiolkovskiy M113107391L (LROC's own feature frame). For Shackleton the 2009 nadir frames were mostly shadow and the 100 m WAC browse is interleaved framelets, so the game uses the 2020 oblique M1346257675L. The pole falls on its rim there (frame line 0.63), as expected. It is squeezed by cos 66.7° to undo the slant, which the image record says. The polar NAC mosaics (2–8 GB) were too large to fetch for one crop. |
+| 78 | Oct 28, 2026 | **"No fuel" names its fix** (user request). On Moon 3 the station-keeping pairs put 15 heavy packings out of fuel; the blocker now says to pack the extra tank and why (the 50 km orbit's monthly trim burns). The engine only suggests the tank after evaluating the craft with it, so the hint is never wrong. |
+| 79 | Oct 28, 2026 | **The Moon scene as built** (rule 45). The overview follows the real orbit plane (55° off face-on) rather than the mockup's fixed camera, since a fixed view saw the ring edge-on on some days. The far side, the shadow and the trim burns are a legend keyed to the ring instead of labels on it, which collided on a phone. The trim tag is a picture on the ring's nearest point (the burns are a pair, anywhere). Moon 1 shows the shadow; the trim tag shows where the level teaches fuel (Moon 2 and Moon 3). |
+| 80 | Oct 28, 2026 | **Moon globe series closed** (PRs #28–#34). Game shots of the three Moon states at 1440 × 900 and 390 × 844, in 3D and 2D, with Tsiolkovskiy observed on the far side (`tests/visual/moon.spec.ts`), next to the mockup's three levels (`docs/design/3d/shots/`). The README credits the four LROC PDS frames and the SVS Moon texture. |
+| 81 | Oct 28, 2026 | **One sound manager** (user request). The cues of rule 33 and new loops share one manager with an autoplay gate (no AudioContext before the first interaction), shared holds for loops, a saved mute in every top bar and a low default volume. It is unit-tested against a mocked AudioContext. |
+| 82 | Oct 28, 2026 | **The game's sounds** (user request). Five sounds are tied to what the player watches: the clack while the teletype types, the hum of the CRT, static while a signal is in transit, a beep when an order or reply arrives, and the print rattle during a downlink. The danger card's alarm became a shorter two-tone alert. Static plays only while the clock moves, so a paused game is quiet. The one-shot print chatter gave way to the rattle loop. |
+| 83 | Oct 28, 2026 | **Cold open** (user request, rule 47). The game's premise (orders arrive late, and mistakes are unrecoverable at a distance) is introduced through Mars Climate Orbiter, already the first Rescue History case, so every fact is one the game already cites. The user's copy is kept as written; the dates, names and units on screen come from the Sourced records. It shows only to a player who is genuinely new, so existing players are not interrupted; Home's INTRO replays it. Sound joins only after the player's first click or key (autoplay rules), so a player who just watches sees it silent. |
+| 84 | Oct 28, 2026 | **Cold open, revised** (user request, rule 47). "SIGNAL EXPECTED IN A FEW MINUTES" became "SIGNAL EXPECTED WHEN IT COMES OUT FROM BEHIND MARS": the game claims no waiting time it cannot source, and the occultation is a cited fact (`signalBehindMars`, NSSDCA). A one-tap gate, ▶ RECEIVE TRANSMISSION, comes first so a player who only watches still hears it; it is skipped only under reduced motion with the sound muted. |
+| 85 | Oct 28, 2026 | **Bangla** (user request, rule 48). An EN / বাংলা switch in every top bar, saved in the browser. The words switch in place (sdWords' exports answer in the current language), so a flight is never restarted by a switch. Numbers and units stay as in English; NASA mission and target names stay in English. Hind Siliguri for the Bangla letters. Shipped in five steps (PRs #39–#43): the switch and the first-time player's screens; Pack and Launch Day; Fly, the robot's voice and the event feed; the drawers and the science panels; the Report, the Notebook and the Daily. |
+| 86 | Oct 28, 2026 | **Bangla for the cited texts** (user request, rule 48, v1.2). Real history, "what we learn", postcard titles and captions, Rescue History and its clues, the Jupiter lesson and rank jobs are shown in Bangla. The Bangla is a UI table keyed by the exact English (`cited.bn.ts`), not a field in the data, so every data value stays English and Sourced; ⓘ shows the English original with its source and link, and "to verify" tags stay. Level titles stay English with a Bangla subtitle for what the level teaches. The Engineer Build Bay stays English. Dates on Rescue History, Mars-now, the Daily and the report comparison use Bangla month names. ⓘ now moves itself to stay on screen when a long text is taller than the room below its button. |
+| 87 | Oct 31, 2026 | **Mission objectives tie science to the instruments** (user choice). Re-weighting alone would not change the winning design: in a calm Cadet Mars flight every pack reaches the same five targets, and pictures do not depend on the instruments. So an objective's targets carry 60% of the science only with a matching instrument (after MAVEN, MRO's HiRISE and SHARAD, and orbiter spectrometers); without one they count at the others' rate. Objectives are Mars only; the Moon and the Daily stay balanced (user choice). |
+| 88 | Oct 31, 2026 | **Team mode** (user request, local co-op first). Roles are optional; an empty role is open to anyone, and with no Flight Director a danger card goes by majority, ties to the recommendation (user choice). Seats get a colour and a call sign from a preset list, and the team talks in preset quick messages only, since players may be children. Every team action goes through one log and a Transport; the mission is (base design, seed, team log). |
+| 89 | Oct 31, 2026 | **The objective vote and the team screens** (rule 49). The Team Setup mockup adds a vote on the objective: the Flight Director picks, the others agree or object, and the FD locks or overrules. It is kept in the log so online play gets it for free, and it does not count in the team score (which stays as rule 88 set it). The mockup leaned the atmosphere on Comms & Ops; the game leans it on the Science Lead and the surface on Comms & Ops, so each objective strains the role that owns its real risk in `team.json` (drag heating is a Science Lead card; big pictures need Comms' dish time). The mockup's MUST / HIGH / BONUS tags became each target's share of the science, which the engine computes. Players are call signs, not the mockup's names (user choice). The online room is shown but off until online play exists. |
+| 90 | Oct 31, 2026 | **Team Fly: one flight, and the vote on the card** (rule 51). The screen keeps its own clock; every order is logged with the mission time it is sent and applied to the screen's flight at that time, so the screen's flight and the log's replay are one mission (tested). Votes are by seat, as the engine already counted them: a seat holding two roles has one token naming both, and the Flight Director's seat has no token (it makes the call). The Flight Director may call before every vote is in, since the engine allows it; the FINAL CALL box says how many are still out. The mockup has the Engineer recommend on a solar storm; the game follows `team.json`, where storms are Comms & Ops'. The quick messages take the COMING UP ribbon's place, as in the mockup. On a phone the card leaves out the real history to make room for the vote (the mockup does too); the desktop keeps it. LET THE ROBOT DECIDE stays. |
+| 91 | Nov 1, 2026 | **Team Debrief** (rule 52). The mockup's rows ("Caused the only budget fight", "5 of 6 images reached Earth", chips such as "NO BACKUP") are written from a story the engine does not record; the game says only what the log and the flight show: the key decision from `teamReport`, a short effect, and a stamp from a verdict rule. The mockup's "DAY 0 → 672" range is left out; the head counts the cards voted on. The score panel's parts are the engine's own (`teamScoreParts`), so the points always add up to the score. The section is gated like the album: NEXT · FINAL TRANSMISSION, as in the mockup. Also: a danger card's text is never cut off (the solo card was wider than the map at 1440, and a three-choice card taller than it at 900 high); `tests/visual/cardfit.spec.ts` and `team.spec.ts` check every text run. |
+| 92 | Nov 2, 2026 | **Online room: the relay** (user choice). Supabase Realtime broadcast and presence on public channels, with only the publishable key in the site, over Firebase (fewer free connections, and its open write rules would let anyone fill the database). A daily read keeps the free project awake. The relay is a pipe: the host screen runs the engine and decides; the phones rebuild the mission from the log. |
+| 93 | Nov 2, 2026 | **Online room: the screens** (rules 53–55). No name field on the phone (call signs only, the user's rule). The resume code is seven characters, made when the room opens, because it keys the room's save in the host's browser (the mockup's day suffix would change during the mission). A role nobody picked goes to the Flight Director's phone at the start, as in the mockup. The mockup's phone panels show the Engineer's battery and the Science Lead's instrument switches; the game's own controls are the tiles, the targets and the DSN key, since those are the orders the engine takes. The Flight Director may still call before every vote is in (decision 90); the strip then says who is still voting. |
+| 94 | Nov 3, 2026 | **Online room: heartbeats** (found by the first room on the real relay, `tests/visual/online-live.spec.ts`). Supabase presence left a joined phone out of one list (the host then refused it until it reloaded) and kept a phone whose network was gone for over a minute (the clock never held). The host now drops a phone only after presence has shown it, links it again when presence shows it again, and drops one it has not heard from for `silentDrop_s`; every screen sends a heartbeat after `beat_s` without sending anything. The relay project (URL and publishable key) is in `online.json`. |
+| 95 | Nov 10, 2026 | **Solo objective is required on Red Planet** (rule 56; user choice, for Space Apps: "define a mission objective" must be playable in Cadet mode). An optional pick with a balanced default was weighed: it would leave today's scoring in place but let a player skip the design choice. The pick lives on the level's design (the team path's `playLevel(level, objective)`), not in Pack's saved packing, so Launch Day, the flight and FLY AGAIN carry it with no extra state. Not packing a matching part is a warning, not a blocker: it is the trade the objective teaches. The engine is unchanged (`objectiveCards`, `objectiveResult`); Team, the Online room, the Daily and Engineer mode are unchanged. |
+| 96 | Nov 10, 2026 | **Cloud Diver gets its own budget** (rule 57; user choice). An over-cap cost was never a blocker, stars come from science only, and even a full nose stayed under the Discovery cap on every level (Venus 371 of 500 $M), so the level that teaches budget could not be over budget. The cap is a level rule (350 $M, a game estimate), not a change to NASA's sourced Discovery cap; only instruments, the big dish and the extra solar panel cost money, so the trade is which instruments to fly. Every level can still earn three stars (Cloud Diver's starter does, seed 2013). Bars only and a blocker that never fires were the rejected options. |
+| 97 | Nov 10, 2026 | **The rocket trade charges the difference** (rule 58; user choice). NASA's caps exclude launch, so without a rule a bigger rocket would cost nothing on the budget bar and would simply be better. The level's standard rocket is free and another one charges, or refunds, its price difference (a game rule, not NASA's: real Announcements of Opportunity treat launch services separately). The Moon levels also offer LRO's shared ride (user choice): its 1,000 kg slot and mass-share price make it the cheap, small option. The real LSP payload points had not arrived, so the choice ships with the two Atlas V placeholders, still labelled game estimates. |
+| 98 | Nov 10, 2026 | **Three science orbits, no low one** (rule 59). The plan's LOW AND SHARP was dropped after measuring it: from MAVEN's 380 km × 35 h capture orbit a low orbit (e.g. 250 × 350 km) needs over 1 km/s, which blocks launch for fuel on most packs, and a low base orbit gives no sharper pictures because each target is shot on a dip. Staying in the capture orbit took its place: no burn, the most fuel, Deimos only. The high orbit's altitudes are a game rule chosen so both moons are reachable with the extra tank, which also gives the moons objective its third star without changing the star rules. A 150 × 12,000 km orbit was also measured and left out, because in this model it matched MAVEN's on atmosphere and surface and beat it on the moons and on fuel, which would leave MAVEN's real orbit with no reason to be picked. The right column became tabs (DANGERS, ROCKET, ORBIT) so it fits at 1440 × 900. |
+| 99 | Nov 11, 2026 | **Real history checked against NASA** (`docs/SPACE_APPS_PLAN.md` PR 5). Each real-history text was read against an official NASA page (NASA Science, NASA/JPL news, NASA History, NSSDCA, PDS, the SOHO site) and given that page as its source and link, with the read date; `isGameEstimate` is false, so the TO VERIFY badge is gone. Seven texts were corrected to what the pages say: Odyssey's MARIE stopped on Oct. 28, 2003; Curiosity's 2017 radiation was more than double any level it had seen, not "doubled"; the comet-flyby orbiters took shelter behind Mars (no orbit change is stated); Voyager 1's commands take about 22.5 hours, not a day; MGS's panel had not latched (the periapsis went from 110 to about 172 km, then on at 120 km, ending February 1999); MCO's page says only that the craft was lost, not that it flew too low; Genesis's sensors were installed incorrectly ("backwards" is not on the page); Mars Polar Lander most likely had a false landing signal (the leg vibration is not on the page). The generic crisis-card line "Solar particle events can trigger spacecraft safe mode." keeps its badge: its only NASA source found is a PDF that could not be read. |
+| 100 | Nov 11, 2026 | **The design loop** (rule 60). The plan's "what hurt you names the Pack choice that would help, where the engine can tell" is kept to dangers: a hazard that went badly maps to the parts that guard against it (hazard factor first) or cover it on the deck, from `pack.json`. A weak category score (power, fuel) is not mapped to a part, because several parts move it and the engine does not say which one would have been enough. The last flight is kept in memory only (a reload drops it): saving engine numbers from an older build could show stale changes. |
+| 101 | Nov 11, 2026 | **A judge link instead of unlocking every level** (rule 61; user choice). Red Planet opens only after a star on each Moon level, which a three-minute judge route cannot wait for. A link that opens a level directly keeps the progression for players; opening every level or routing through the Moon were the rejected options. The link carries seed 2013 because a random flight can reach Mars with no danger card at all. The comic's sound words are centre-anchored after the new clipped-text check found them past the panel edge at 1440 × 900. |

@@ -1,0 +1,216 @@
+// Display formatting only: unit conversion and rounding, following the spec's display rules
+// ("Constants and units"). No physics here; every value comes from the engine.
+import { AU_M } from '../engine/constants';
+import type { Sourced } from '../engine/types';
+
+/** The language numbers, dates and unit words are written in (i18n.ts sets it; English by default). */
+let lang: 'en' | 'fr' = 'en';
+export function setFormatLang(l: 'en' | 'fr') {
+  lang = l;
+}
+const fr = () => lang === 'fr';
+const locale = () => (fr() ? 'fr-FR' : 'en-US');
+
+const nf = (digits: number) => new Intl.NumberFormat(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+export const num = (x: number, digits = 0): string => (Number.isFinite(x) ? nf(digits).format(x) : '∞');
+
+/** Prefix + or − (a true minus sign), unless the value rounds to zero as shown. */
+const withSign = (x: number, abs: string) => (!/[1-9]/.test(abs) ? abs : `${x > 0 ? '+' : '−'}${abs}`);
+
+export const kg = (x: number) => `${num(x)} kg`;
+export const watts = (x: number) => `${num(x)} W`;
+export const signedKg = (x: number) => withSign(x, kg(Math.abs(x)));
+export const signedWatts = (x: number) => withSign(x, watts(Math.abs(x)));
+
+/** Speeds in m/s below 10 km/s, km/s above (spec display rules). */
+export function speed(ms: number): string {
+  return Math.abs(ms) < 10_000 ? `${num(ms)} m/s` : `${num(ms / 1000, 2)} km/s`;
+}
+
+/** Small speeds to a tenth (a trim burn: "10.8 m/s"). */
+export const speedFine = (ms: number) => `${num(ms, 1)} m/s`;
+
+/** A short time to a tenth of a second (the Moon's light time: "1.3 s"). */
+export const secondsFine = (s: number) => `${num(s, 1)} s`;
+
+/** Distances in million km. */
+export const millionKm = (m: number) => `${num(m / 1e9, 1)} ${fr() ? 'millions de km' : 'million km'}`;
+
+/** A short length in metres (ground resolution). */
+export const meters = (m: number) => `${num(m, m < 10 ? 1 : 0)} m`;
+
+/** A distance for Cadet screens: km below a million km (the Moon), million km beyond. */
+export const distance = (m: number) => (Math.abs(m) < 1e9 ? `${num(m / 1000)} km` : millionKm(m));
+
+/** A ratio shown as a factor ("2.0", "0.35"; "<0.01" for one too small to read). */
+export const factor = (x: number) => (x < 0.01 ? '<0.01' : num(x, x < 1 ? 2 : 1));
+
+/** Light delay in minutes. */
+export const minutes = (s: number) => `${num(s / 60, 1)} min`;
+
+/** Cost in $M; the fiscal year is taken from the Sourced unit, e.g. "$M (FY2019)". */
+export function money(M: number, digits = 0): string {
+  return `$${num(M, digits)}M`;
+}
+export const signedMoney = (M: number) => withSign(M, money(Math.abs(M), Math.abs(M) < 10 ? 1 : 0));
+export function fiscalYear(unit: string): string {
+  return /FY\d{4}/.exec(unit)?.[0] ?? '';
+}
+
+export const pct = (fraction: number, digits = 1) => `${num(fraction * 100, digits)}%`;
+/** Signed percentage; above ±1000% the decimals are dropped (they carry no meaning there). */
+export const signedPct = (fraction: number, digits = 1) =>
+  Number.isFinite(fraction)
+    ? withSign(fraction, pct(Math.abs(fraction), Math.abs(fraction) >= 10 ? 0 : digits))
+    : fraction > 0
+      ? '+∞'
+      : '−∞';
+
+/** Data volumes: bits → Gbit (or Mbit when small). */
+export function bits(b: number): string {
+  if (!Number.isFinite(b)) return '∞';
+  // two decimals for small Gbit amounts, none from 100 Gbit up (the Moon's link: "693,000 Gbit", not "692,999.94")
+  return b >= 1e9 ? `${num(b / 1e9, b >= 1e11 ? 0 : 2)} Gbit` : `${num(b / 1e6, 0)} Mbit`;
+}
+export const signedBits = (b: number) => withSign(b, bits(Math.abs(b)));
+export const gbit = (g: number) => `${num(g, g < 10 ? 2 : 0)} Gbit`;
+
+export const days = (d: number) => `${num(d)} ${fr() ? 'jours' : 'days'}`;
+
+/** C3 in km²/s². */
+export const c3 = (x: number) => `${num(x, 1)} km²/s²`;
+
+/** A Sourced number with its own unit, converting only very large SI lengths for readability. */
+export function sourcedValue(s: Sourced<unknown>): string {
+  const v = s.value;
+  if (typeof v !== 'number') return Array.isArray(v) ? `${v.length} points` : String(v);
+  if (s.unit === 'm' && Math.abs(v) >= 1e7) return millionKm(v);
+  if (s.unit === 'fraction' || s.unit === 'probability') return pct(v, Math.abs(v) < 0.01 ? 2 : 1);
+  if (s.unit === 'seed') return `seed ${String(v)}`;
+  // 'fraction of the day', 'fraction per year', 'fraction of 1 AU sunlight' … read as a percentage
+  if (s.unit.startsWith('fraction ')) return `${pct(v, Math.abs(v) < 0.01 ? 2 : 1)} ${s.unit.slice('fraction '.length)}`;
+  if (s.unit === 'runs' || s.unit === 'flights') return `${num(v)} ${s.unit}`;
+  const digits = Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 1 ? 2 : 3;
+  const unit = s.unit.startsWith('$M') ? 'M' : s.unit;
+  if (s.unit.startsWith('$M')) return `$${num(v, digits)}${unit}`;
+  return `${num(v, digits)} ${unit}`.trim();
+}
+
+/** camelCase / snake_case input keys → readable labels. */
+export function label(key: string): string {
+  const special: Record<string, string> = {
+    S0: 'Solar irradiance S₀',
+    g0: 'Standard gravity g₀',
+    etaSys: 'System efficiency η_sys',
+    isp: 'Specific impulse Isp',
+    c3: 'Launch energy C3',
+  };
+  if (special[key]) return special[key];
+  const words = key
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export const isoDate = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/** A date spelled out for a headline: "SEPTEMBER 23, 1999". */
+export const longDate = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale(), { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
+
+/** A date as the CRT prints it: "21 OCT 2026". */
+export const crtDate = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString(fr() ? 'fr-FR' : 'en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
+
+/** Coins for a cost (Cadet): one 💰 per coin, ×n after a few. The coin count comes from the engine. */
+export const coins = (n: number) => (n <= 0 ? '—' : n <= 4 ? '💰'.repeat(n) : `💰×${num(n)}`);
+
+/** A countdown in m:ss (or h:mm:ss for long light delays). */
+export function clock(s: number): string {
+  const t = Math.max(0, Math.ceil(s));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const sec = String(t % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+/** Photos per day, rounded down to whole photos. */
+export const photos = (n: number) => num(Math.floor(n));
+
+/** Two digits: 1 → 01 (clock fields, card numbers). */
+export const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** A light time as minutes and seconds ("11 m 54 s"), or hours and minutes when long. */
+export function lightTime(s: number): string {
+  const t = Math.max(0, Math.round(s));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const sec = t % 60;
+  if (h > 0) return `${h} h ${pad2(m)} m`;
+  return m > 0 ? `${m} m ${pad2(sec)} s` : `${sec} s`;
+}
+
+/** Mission elapsed time from fractional days ("214 d 06:42:10"). */
+export function met(tDays: number): string {
+  const total = Math.max(0, Math.floor(tDays * 86_400));
+  const d = Math.floor(total / 86_400);
+  const r = total % 86_400;
+  return `${num(d)} d ${pad2(Math.floor(r / 3600))}:${pad2(Math.floor((r % 3600) / 60))}:${pad2(r % 60)}`;
+}
+
+/** A link data rate (bit/s → kbps or Mbps). */
+export const rate = (bps: number) => (bps >= 1e6 ? `${num(bps / 1e6, 2)} Mbps` : `${num(bps / 1e3, 0)} kbps`);
+
+/** An angle in degrees. */
+export const deg = (x: number, digits = 1) => `${num(x, digits)}°`;
+
+/** An altitude above Mars in whole km (the globe's orbit labels). */
+export const km = (m: number) => `${num(m / 1000)} km`;
+
+/** A place on Mars: "18.4°N 134.0°W" (the pole: "90°N"). */
+export function latLon(lat_deg: number, lon_deg: number): string {
+  const ns = `${num(Math.abs(lat_deg), Math.abs(lat_deg) >= 89.95 ? 0 : 1)}°${lat_deg >= 0 ? 'N' : 'S'}`;
+  if (Math.abs(lat_deg) >= 89.95) return ns;
+  return `${ns} ${num(Math.abs(lon_deg), 1)}°${lon_deg >= 0 ? 'E' : fr() ? 'O' : 'W'}`;
+}
+
+/** Distance in AU (Engineer). */
+export const au = (m: number) => `${num(m / AU_M, 3)} ${fr() ? 'UA' : 'AU'}`;
+
+/** A light time in whole minutes ("14"), for "… LIGHT-MINUTES AWAY". */
+export const wholeMinutes = (s: number) => num(Math.round(s / 60));
+
+/** A countdown as MM:SS, zero-padded (the CRT countdown), or H:MM:SS when an hour or longer. */
+export function mmss(s: number): string {
+  const t = Math.max(0, Math.round(s));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(t % 60)}` : `${pad2(m)}:${pad2(t % 60)}`;
+}
+
+/** A day number padded to three digits for the CRT clock ("007"). */
+export const dayPad = (d: number) => String(Math.max(0, Math.floor(d))).padStart(3, '0');
+
+/** A duration as one rounded number and its unit, for durationWords. */
+export function durationParts(s: number): { n: number; unit: 'day' | 'hour' | 'minute' | 'second' } {
+  const t = Math.max(0, s);
+  if (t >= 2 * 86_400) return { n: Math.round(t / 86_400), unit: 'day' };
+  if (t >= 2 * 3600) return { n: Math.round(t / 3600), unit: 'hour' };
+  if (t >= 90) return { n: Math.round(t / 60), unit: 'minute' };
+  return { n: Math.round(t), unit: 'second' };
+}
+
+/** A duration in one big word for a danger card: "30 HOURS", "12 MINUTES", "3 DAYS", "40 SECONDS". */
+export function durationWords(s: number): string {
+  const { n, unit } = durationParts(s);
+  const word = fr()
+    ? { day: 'JOURS', hour: 'HEURES', minute: 'MINUTES', second: n === 1 ? 'SECONDE' : 'SECONDES' }[unit]
+    : { day: 'DAYS', hour: 'HOURS', minute: 'MINUTES', second: n === 1 ? 'SECOND' : 'SECONDS' }[unit];
+  return `${num(n)} ${word}`;
+}
+
+/** A segment change on a chip, with a true minus sign: "−1", "+2". */
+export const signedInt = (n: number) => (n === 0 ? '0' : `${n > 0 ? '+' : '−'}${num(Math.abs(n))}`);
