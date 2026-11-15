@@ -4,6 +4,10 @@
 
 Welcome to the official repository of **Signal Delay**, our project for the NASA Space Apps Challenge 2026.
 
+### 🎮 [Play Signal Delay in your browser](https://ahmad-nayma.github.io/signal-delay/)
+
+👉 **https://ahmad-nayma.github.io/signal-delay/**
+
 ![Signal Delay home screen](docs/images/screens/01-home.png)
 
 ## 🚀 About the Name: Why "Signal Delay"?
